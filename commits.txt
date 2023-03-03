@@ -1,0 +1,3128 @@
+commit 14015be5bb4ef69c710ac5a4fad5a5d2a548e3fb (HEAD -> master, origin/master, origin/HEAD)
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Thu Mar 2 13:33:21 2023 +0800
+
+    cmd/compile: optimize multiplication on loong64
+    
+    Previously, multiplication on loong64 architecture was performed using
+    MULV and MULHVU instructions to calculate the low 64-bit and high
+    64-bit of a multiplication respectively. However, in most cases, only
+    the low 64-bits are needed. This commit enalbes only computating the low
+    64-bit result with the MULV instruction.
+    
+    Reduce the binary size slightly.
+    
+    file      before    after     Δ       %
+    addr2line 2833777   2833849   +72     +0.003%
+    asm       5267499   5266963   -536    -0.010%
+    buildid   2579706   2579402   -304    -0.012%
+    cgo       4798260   4797444   -816    -0.017%
+    compile   25247419  25175030  -72389  -0.287%
+    cover     4973091   4972027   -1064   -0.021%
+    dist      3631013   3565653   -65360  -1.800%
+    doc       4076036   4074004   -2032   -0.050%
+    fix       3496378   3496066   -312    -0.009%
+    link      6984102   6983214   -888    -0.013%
+    nm        2743820   2743516   -304    -0.011%
+    objdump   4277171   4277035   -136    -0.003%
+    pack      2379248   2378872   -376    -0.016%
+    pprof     14419090  14419874  +784    +0.005%
+    test2json 2684386   2684018   -368    -0.014%
+    trace     13640018  13631034  -8984   -0.066%
+    vet       7748918   7752630   +3712   +0.048%
+    go        15643850  15638098  -5752   -0.037%
+    total     127423782 127268729 -155053 -0.122%
+    
+    Change-Id: Ifce4a9a3ed1d03c170681e39cb6f3541db9882dc
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/472775
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/cmd/compile/internal/loong64/ssa.go         |  29 +-
+ src/cmd/compile/internal/ssa/_gen/LOONG64.rules |  27 +-
+ src/cmd/compile/internal/ssa/_gen/LOONG64Ops.go |   9 +-
+ src/cmd/compile/internal/ssa/opGen.go           |  44 ++-
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go  | 392 +++++++++---------------
+ 5 files changed, 192 insertions(+), 309 deletions(-)
+
+commit 83907206de003555c73a16b1b6d97662b5511cf7
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Thu Sep 1 12:26:43 2022 +0800
+
+    cmd/compile: improve logical shift with MASKEQZ on loong64
+    
+    Using MASKEQZ instruction can save one instruction in calculation of
+    shift operations.
+    
+    Reference: https://loongson.github.io/LoongArch-Documentation/LoongArch-Vol1-EN.html
+    
+    Change-Id: Ic5349c6f5ebd7af608c7d75a9b3a862305758275
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/427396
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+    Reviewed-by: abner chenc <chenguoqi@loongson.cn>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Dmitri Shuralyov <dmitshur@google.com>
+
+ src/cmd/compile/internal/ssa/_gen/LOONG64.rules |  80 +--
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go  | 775 ++++++++++++------------
+ 2 files changed, 412 insertions(+), 443 deletions(-)
+
+commit bf8d142b4ebe9f84e75b20a87d292d2d6ec13fab
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Thu Aug 4 18:13:59 2022 +0800
+
+    cmd/asm: add RDTIME{L,H}.W, RDTIME.D support for loong64
+    
+    Instruction formats: rdtime rd, rj
+    
+    The RDTIME family of instructions are used to read constant frequency timer
+    information, the stable counter value is written into the general register
+    rd, and the counter id information is written into the general register rj.
+    (Note: both of its register operands are outputs).
+    
+    Ref: https://loongson.github.io/LoongArch-Documentation/LoongArch-Vol1-EN.html
+    
+    Change-Id: Ida5bbb28316ef70b5f616dac3e6fa6f2e77875b5
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/421655
+    Reviewed-by: xiaodong liu <teaofmoli@gmail.com>
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+    Reviewed-by: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Meidan Li <limeidan@loongson.cn>
+
+ src/cmd/asm/internal/arch/loong64.go            |  11 +
+ src/cmd/asm/internal/asm/asm.go                 |  12 +
+ src/cmd/asm/internal/asm/testdata/loong64enc1.s |   4 +
+ src/cmd/internal/obj/loong64/a.out.go           |   5 +
+ src/cmd/internal/obj/loong64/anames.go          |   3 +
+ src/cmd/internal/obj/loong64/asm.go             | 647 ++++++++++++------------
+ src/cmd/internal/obj/util.go                    |   1 +
+ 7 files changed, 373 insertions(+), 310 deletions(-)
+
+commit 839c84255034d5181bb69e8d10070119ab97d9fe
+Author: Robert Griesemer <gri@golang.org>
+Date:   Mon Jan 9 11:46:15 2023 -0800
+
+    go/types, cmd/compile/internal/types2: minor adjustments (cleanups)
+    
+    go/types:
+    - gofmt a couple of files
+    
+    types2:
+    - add loong64 to sizes list (present in go/types)
+    - fix a type in validtype.go
+    - co-locate an accessor with others in typeparam.go
+    
+    This changes further reduce discrepancy between types2 and go/types.
+    
+    Change-Id: I2e6a09f1c4b8dbc947c48af13031ff58a2bc6f4d
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/460996
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Robert Findley <rfindley@google.com>
+    Run-TryBot: Robert Griesemer <gri@google.com>
+    Auto-Submit: Robert Griesemer <gri@google.com>
+    Reviewed-by: Robert Griesemer <gri@google.com>
+
+ src/cmd/compile/internal/types2/gccgosizes.go | 1 +
+ src/cmd/compile/internal/types2/typeparam.go  | 6 +++---
+ src/cmd/compile/internal/types2/validtype.go  | 2 +-
+ src/go/types/errorcalls_test.go               | 2 +-
+ src/go/types/testdata/manual.go               | 1 -
+ 5 files changed, 6 insertions(+), 6 deletions(-)
+
+commit 0b2ad1d815ea8967c49b32d848b2992d0c588d88
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Mon Dec 19 05:04:48 2022 +0800
+
+    cmd/compile: sign-extend the 2nd argument of the LoweredAtomicCas32 on loong64,mips64x,riscv64
+    
+    The function LoweredAtomicCas32 is implemented using the LL-SC instruction pair
+    on loong64, mips64x, riscv64. However,the LL instruction on loong64, mips64x,
+    riscv64 is sign-extended, so it is necessary to sign-extend the 2nd parameter
+    "old" of the LoweredAtomicCas32, so that the instruction BNE after LL can get
+    the desired result.
+    
+    The function prototype of LoweredAtomicCas32 in golang:
+        func Cas32(ptr *uint32, old, new uint32) bool
+    
+    When using an intrinsify implementation:
+        case 1: (*ptr) <= 0x80000000 && old < 0x80000000
+            E.g: (*ptr) = 0x7FFFFFFF, old = Rarg1= 0x7FFFFFFF
+    
+            After run the instruction "LL (Rarg0), Rtmp": Rtmp = 0x7FFFFFFF
+            Rtmp ! = Rarg1(old) is false, the result we expect
+    
+        case 2: (*ptr) >= 0x80000000 && old >= 0x80000000
+            E.g: (*ptr) = 0x80000000, old = Rarg1= 0x80000000
+    
+            After run the instruction "LL (Rarg0), Rtmp": Rtmp = 0xFFFFFFFF_80000000
+            Rtmp ! = Rarg1(old) is true, which we do not expect
+    
+    When using an non-intrinsify implementation:
+        Because Rarg1 is loaded from the stack using sign-extended instructions
+        ld.w, the situation described in Case 2 above does not occur
+    
+    Benchmarks on linux/loong64:
+    name     old time/op  new time/op  delta
+    Cas      50.0ns ± 0%  50.1ns ± 0%   ~     (p=1.000 n=1+1)
+    Cas64    50.0ns ± 0%  50.1ns ± 0%   ~     (p=1.000 n=1+1)
+    Cas-4    56.0ns ± 0%  56.0ns ± 0%   ~     (p=1.000 n=1+1)
+    Cas64-4  56.0ns ± 0%  56.0ns ± 0%   ~     (p=1.000 n=1+1)
+    
+    Benchmarks on Loongson 3A4000 (GOARCH=mips64le, 1.8GHz)
+    name     old time/op  new time/op  delta
+    Cas      70.4ns ± 0%  70.3ns ± 0%   ~     (p=1.000 n=1+1)
+    Cas64    70.7ns ± 0%  70.6ns ± 0%   ~     (p=1.000 n=1+1)
+    Cas-4    81.1ns ± 0%  80.8ns ± 0%   ~     (p=1.000 n=1+1)
+    Cas64-4  80.9ns ± 0%  80.9ns ± 0%   ~     (p=1.000 n=1+1)
+    
+    Fixes #57282
+    
+    Change-Id: I190a7fc648023b15fa392f7fdda5ac18c1561bac
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/457135
+    Run-TryBot: Than McIntosh <thanm@google.com>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: Matthew Dempsky <mdempsky@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: Than McIntosh <thanm@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/cmd/compile/internal/ssa/_gen/LOONG64.rules |  3 ++-
+ src/cmd/compile/internal/ssa/_gen/MIPS64.rules  |  3 ++-
+ src/cmd/compile/internal/ssa/_gen/RISCV64.rules |  2 +-
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go  | 24 ++++++++++++++++++--
+ src/cmd/compile/internal/ssa/rewriteMIPS64.go   | 24 ++++++++++++++++++--
+ src/cmd/compile/internal/ssa/rewriteRISCV64.go  | 24 ++++++++++++++++++--
+ src/runtime/internal/atomic/atomic_test.go      | 30 +++++++++++++++++++++++++
+ 7 files changed, 101 insertions(+), 9 deletions(-)
+
+commit 298635896911337aa6f5957716621dbebbf307d0
+Author: Cherry Mui <cherryyz@google.com>
+Date:   Mon Dec 5 13:02:22 2022 -0500
+
+    runtime/cgo: fix typo in gcc_loong64.S
+    
+    Fix typo in CL 454838.
+    
+    Change-Id: I0e91d22cf09949f0bf924ebcf09f1ddac525bac4
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/455161
+    Reviewed-by: Dmitri Shuralyov <dmitshur@golang.org>
+    Run-TryBot: Cherry Mui <cherryyz@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+
+ src/runtime/cgo/gcc_loong64.S | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 0266671e3d829c216e10e1a5ad6b4647ea5e39c4
+Author: Austin Clements <austin@google.com>
+Date:   Fri Nov 4 14:58:40 2022 -0400
+
+    cmd/dist: add curiously missing GOOS/GOARCH combinations
+    
+    The cmd/dist cgo_test enumerates a large number of platforms in
+    various special cases. Some combinations are suspiciously absent. This
+    CL completes the combinations.
+    
+    I've confirmed using trybots that the newly-enabled tests pass on
+    android/* (this is not surprising because the gohostos is never
+    "android" anyway), windows/arm64, linux/ppc64 (no cgo), linux/loong64
+    (except for one test, filed #56623), linux/mips*, netbsd/arm (except
+    for one test, filed #56629), and netbsd/arm64. The windows/arm builder
+    is out to lunch, so I'm assuming that works. Since netbsd/arm and
+    arm64 mostly passed these tests, I've also enabled them on netbsd/386
+    and netbsd/amd64, where they seem to work fine as well.
+    
+    Preparation for #37486.
+    
+    Change-Id: I04c3348e4f422d74d51e714647ca3db379e6e919
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/448016
+    Run-TryBot: Austin Clements <austin@google.com>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Austin Clements <austin@google.com>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+
+ src/cmd/dist/test.go | 20 ++++++++++++--------
+ 1 file changed, 12 insertions(+), 8 deletions(-)
+
+commit ffc4496306a93a5d95abd6b1ec7bb81ca02c0026
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Thu Nov 10 22:55:00 2022 +0800
+
+    cmd/compile: remove output registers limit for MUL/DIV on loong64
+    
+    This limitation exists on MIPS platform, but not on loong64.
+    
+    Change-Id: I14bb3ec6895a8f7850873c171e1756843ffea72e
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/449395
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/cmd/compile/internal/ssa/_gen/LOONG64Ops.go | 10 +++----
+ src/cmd/compile/internal/ssa/opGen.go           | 40 ++++++++++++++-----------
+ 2 files changed, 27 insertions(+), 23 deletions(-)
+
+commit d96eb826cb7cd4fe36745e3b1a79e0a2571acc4a
+Author: Jakub Ciolek <jakub@ciolek.dev>
+Date:   Mon Sep 19 13:08:08 2022 +0200
+
+    cmd/compile: teach prove about signed domain relations of constant integer Phi's
+    
+    Implement extracting signed domain relations for OpPhi's composed entirely of integer constants.
+    
+    darwin/arm benches (M1 Pro):
+    
+    EqIfaceConcrete-10            0.83ns ± 0%  0.78ns ± 0%  -6.52%  p=0.000 n=8+9 )
+    ConvT2EByteSized/bool-10      1.33ns ± 0%  1.25ns ± 0%  -6.4%  ( p=0.000 n=9+8 )
+    ConvT2EByteSized/uint8-10     1.27ns ± 1%  1.25ns ± 0%  -1.82%( p=0.000 n=8+8 )
+    ConvT2ESmall-10               2.18ns ± 0%  2.14ns ± 1%  -1.97%( p=0.000 n=9+9 )
+    
+    compilecmp linux/amd64  reports a 1.4% reduction in total size:
+    
+    file                                                                     before   after    Δ       %
+    unicode/utf8.s                                                           4251     4317     +66     +1.553%
+    runtime/internal/sys.s                                                   599      593      -6      -1.002%
+    sync/atomic.s                                                            2277     1695     -582    -25.560%
+    internal/cpu.s                                                           5412     5249     -163    -3.012%
+    internal/abi.s                                                           1006     1045     +39     +3.877%
+    container/list.s                                                         4821     4858     +37     +0.767%
+    unicode/utf16.s                                                          1162     868      -294    -25.301%
+    hash/maphash.s                                                           2525     2625     +100    +3.960%
+    image/color.s                                                            7414     7045     -369    -4.977%
+    math.s                                                                   37278    37246    -32     -0.086%
+    math/cmplx.s                                                             8868     8876     +8      +0.090%
+    runtime.s                                                                496893   486910   -9983   -2.009%
+    runtime/metrics.s                                                        1145     1165     +20     +1.747%
+    sync.s                                                                   14257    15049    +792    +5.555%
+    internal/singleflight.s                                                  2557     2576     +19     +0.743%
+    internal/reflectlite.s                                                   59715    21713    -38002  -63.639%
+    math/rand.s                                                              10153    9980     -173    -1.704%
+    path.s                                                                   6007     6091     +84     +1.398%
+    sort.s                                                                   20704    20717    +13     +0.063%
+    io.s                                                                     19708    18899    -809    -4.105%
+    container/heap.s                                                         1922     1932     +10     +0.520%
+    cmd/vendor/golang.org/x/mod/semver.s                                     8013     7922     -91     -1.136%
+    strconv.s                                                                50530    49955    -575    -1.138%
+    vendor/golang.org/x/net/dns/dnsmessage.s                                 79054    80314    +1260   +1.594%
+    bytes.s                                                                  31195    31448    +253    +0.811%
+    text/tabwriter.s                                                         8952     9037     +85     +0.950%
+    strings.s                                                                43052    41627    -1425   -3.310%
+    crypto/internal/nistec/fiat.s                                            124219   123197   -1022   -0.823%
+    syscall.s                                                                85224    84600    -624    -0.732%
+    hash/adler32.s                                                           1224     1221     -3      -0.245%
+    encoding/ascii85.s                                                       4131     4149     +18     +0.436%
+    hash/crc32.s                                                             6304     6347     +43     +0.682%
+    encoding/base32.s                                                        8466     8473     +7      +0.083%
+    vendor/golang.org/x/text/transform.s                                     15633    16050    +417    +2.667%
+    bufio.s                                                                  24464    22091    -2373   -9.700%
+    reflect.s                                                                258373   164941   -93432  -36.162%
+    internal/syscall/unix.s                                                  1730     1299     -431    -24.913%
+    go/build/constraint.s                                                    12959    13581    +622    +4.800%
+    hash/crc64.s                                                             3604     3673     +69     +1.915%
+    hash/fnv.s                                                               4482     4609     +127    +2.834%
+    compress/bzip2.s                                                         9586     9891     +305    +3.182%
+    time.s                                                                   92081    89953    -2128   -2.311%
+    regexp/syntax.s                                                          78123    78293    +170    +0.218%
+    internal/saferio.s                                                       1746     1635     -111    -6.357%
+    html.s                                                                   4228     4233     +5      +0.118%
+    encoding/binary.s                                                        31383    31282    -101    -0.322%
+    image.s                                                                  37513    38082    +569    +1.517%
+    internal/poll.s                                                          45486    43956    -1530   -3.364%
+    context.s                                                                11096    10804    -292    -2.632%
+    io/fs.s                                                                  16921    18609    +1688   +9.976%
+    regexp.s                                                                 58983    58790    -193    -0.327%
+    crypto/cipher.s                                                          18686    18718    +32     +0.171%
+    crypto/internal/edwards25519/field.s                                     9473     9488     +15     +0.158%
+    crypto/sha1.s                                                            6477     6537     +60     +0.926%
+    encoding/base64.s                                                        10615    10215    -400    -3.768%
+    vendor/golang.org/x/crypto/internal/poly1305.s                           4522     4567     +45     +0.995%
+    cmd/internal/sys.s                                                       4729     4965     +236    +4.990%
+    os.s                                                                     53819    53697    -122    -0.227%
+    embed.s                                                                  6428     6437     +9      +0.140%
+    crypto/des.s                                                             5770     5762     -8      -0.139%
+    encoding/pem.s                                                           6425     6467     +42     +0.654%
+    crypto/internal/edwards25519.s                                           31850    31948    +98     +0.308%
+    image/draw.s                                                             28660    28594    -66     -0.230%
+    image/jpeg.s                                                             32246    32385    +139    +0.431%
+    index/suffixarray.s                                                      38665    38627    -38     -0.098%
+    crypto/hmac.s                                                            2546     2437     -109    -4.281%
+    fmt.s                                                                    70412    71396    +984    +1.397%
+    crypto/sha256.s                                                          5708     5683     -25     -0.438%
+    crypto/sha512.s                                                          8346     8313     -33     -0.395%
+    crypto/aes.s                                                             11586    11231    -355    -3.064%
+    path/filepath.s                                                          16499    16438    -61     -0.370%
+    crypto/internal/nistec.s                                                 65640    65713    +73     +0.111%
+    internal/lazyregexp.s                                                    2389     2284     -105    -4.395%
+    internal/intern.s                                                        2988     3266     +278    +9.304%
+    os/user.s                                                                12166    12106    -60     -0.493%
+    compress/lzw.s                                                           7292     7264     -28     -0.384%
+    encoding/hex.s                                                           5431     5405     -26     -0.479%
+    compress/flate.s                                                         46812    47932    +1120   +2.393%
+    net/url.s                                                                26853    26638    -215    -0.801%
+    crypto/ecdh.s                                                            10015    12228    +2213   +22.097%
+    vendor/golang.org/x/sys/cpu.s                                            5877     5599     -278    -4.730%
+    database/sql/driver.s                                                    16553    16671    +118    +0.713%
+    net/netip.s                                                              39077    40164    +1087   +2.782%
+    debug/plan9obj.s                                                         6765     6679     -86     -1.271%
+    math/big.s                                                               160530   161099   +569    +0.354%
+    archive/tar.s                                                            59285    59692    +407    +0.687%
+    debug/dwarf.s                                                            117589   116367   -1222   -1.039%
+    compress/gzip.s                                                          8288     8255     -33     -0.398%
+    archive/zip.s                                                            51813    49835    -1978   -3.818%
+    compress/zlib.s                                                          6206     6209     +3      +0.048%
+    runtime/debug.s                                                          11995    12212    +217    +1.809%
+    database/sql.s                                                           91280    90859    -421    -0.461%
+    crypto/dsa.s                                                             4816     4784     -32     -0.664%
+    net.s                                                                    272116   271353   -763    -0.280%
+    crypto/elliptic.s                                                        30485    32898    +2413   +7.915%
+    encoding/asn1.s                                                          47189    48186    +997    +2.113%
+    crypto/rand.s                                                            3812     3801     -11     -0.289%
+    debug/macho.s                                                            30712    27800    -2912   -9.482%
+    debug/pe.s                                                               23198    23542    +344    +1.483%
+    debug/elf.s                                                              50653    50335    -318    -0.628%
+    internal/xcoff.s                                                         18330    18578    +248    +1.353%
+    debug/gosym.s                                                            37011    34275    -2736   -7.392%
+    encoding/csv.s                                                           11440    11497    +57     +0.498%
+    encoding/json.s                                                          95650    92269    -3381   -3.535%
+    vendor/golang.org/x/crypto/cryptobyte.s                                  31261    31418    +157    +0.502%
+    encoding/gob.s                                                           131648   132481   +833    +0.633%
+    crypto/x509/pkix.s                                                       9030     9285     +255    +2.824%
+    crypto/rsa.s                                                             25753    25620    -133    -0.516%
+    debug/buildinfo.s                                                        7329     7360     +31     +0.423%
+    log.s                                                                    12153    12554    +401    +3.300%
+    encoding/xml.s                                                           90630    91544    +914    +1.008%
+    net/textproto.s                                                          17674    15707    -1967   -11.129%
+    vendor/golang.org/x/text/unicode/norm.s                                  66104    66296    +192    +0.290%
+    vendor/golang.org/x/net/http2/hpack.s                                    23542    24291    +749    +3.182%
+    mime/quotedprintable.s                                                   5074     5106     +32     +0.631%
+    mime.s                                                                   32982    32673    -309    -0.937%
+    net/http/internal.s                                                      5765     4748     -1017   -17.641%
+    flag.s                                                                   25247    25434    +187    +0.741%
+    vendor/golang.org/x/text/unicode/bidi.s                                  30444    30707    +263    +0.864%
+    go/token.s                                                               13689    14075    +386    +2.820%
+    go/doc/comment.s                                                         49201    47717    -1484   -3.016%
+    internal/buildcfg.s                                                      10468    9949     -519    -4.958%
+    text/scanner.s                                                           9812     9814     +2      +0.020%
+    os/exec.s                                                                34367    29498    -4869   -14.168%
+    mime/multipart.s                                                         17568    17083    -485    -2.761%
+    image/gif.s                                                              22965    22826    -139    -0.605%
+    crypto/x509.s                                                            142551   139844   -2707   -1.899%
+    text/template/parse.s                                                    82771    94885    +12114  +14.636%
+    go/scanner.s                                                             17306    17321    +15     +0.087%
+    internal/dag.s                                                           13123    13368    +245    +1.867%
+    go/constant.s                                                            29736    32872    +3136   +10.546%
+    image/png.s                                                              37126    37013    -113    -0.304%
+    internal/goroot.s                                                        3080     3212     +132    +4.286%
+    internal/diff.s                                                          7561     7909     +348    +4.603%
+    vendor/golang.org/x/net/idna.s                                           22454    22493    +39     +0.174%
+    go/ast.s                                                                 63945    68792    +4847   +7.580%
+    internal/pkgbits.s                                                       19638    19838    +200    +1.018%
+    text/template.s                                                          107139   100338   -6801   -6.348%
+    runtime/trace.s                                                          2844     2762     -82     -2.883%
+    internal/txtar.s                                                         2495     2483     -12     -0.481%
+    internal/profile.s                                                       117110   118516   +1406   +1.201%
+    log/syslog.s                                                             6615     6625     +10     +0.151%
+    vendor/golang.org/x/net/http/httpguts.s                                  3558     3580     +22     +0.618%
+    crypto/tls.s                                                             298298   292244   -6054   -2.030%
+    internal/trace.s                                                         69626    67477    -2149   -3.086%
+    vendor/golang.org/x/net/http/httpproxy.s                                 8164     7942     -222    -2.719%
+    go/doc.s                                                                 69092    71449    +2357   +3.411%
+    go/internal/typeparams.s                                                 1465     1338     -127    -8.669%
+    go/printer.s                                                             90427    82948    -7479   -8.271%
+    html/template.s                                                          91720    90853    -867    -0.945%
+    runtime/pprof.s                                                          70261    69793    -468    -0.666%
+    testing.s                                                                107098   98982    -8116   -7.578%
+    net/internal/socktest.s                                                  15715    15469    -246    -1.565%
+    net/mail.s                                                               17762    18044    +282    +1.588%
+    net/smtp.s                                                               11295    11484    +189    +1.673%
+    os/signal.s                                                              7647     7779     +132    +1.726%
+    go/parser.s                                                              111336   116170   +4834   +4.342%
+    testing/iotest.s                                                         13339    13379    +40     +0.300%
+    testing/quick.s                                                          8493     8516     +23     +0.271%
+    cmd/internal/bio.s                                                       11994    8754     -3240   -27.014%
+    internal/testenv.s                                                       7067     6779     -288    -4.075%
+    vendor/golang.org/x/net/nettest.s                                        27692    27770    +78     +0.282%
+    cmd/internal/objabi.s                                                    15031    14718    -313    -2.082%
+    cmd/internal/src.s                                                       14507    14515    +8      +0.055%
+    cmd/vendor/golang.org/x/arch/arm/armasm.s                                33278    33864    +586    +1.761%
+    go/format.s                                                              4517     4725     +208    +4.605%
+    go/build.s                                                               67444    70250    +2806   +4.160%
+    testing/fstest.s                                                         53785    52941    -844    -1.569%
+    cmd/vendor/golang.org/x/arch/arm64/arm64asm.s                            86346    87156    +810    +0.938%
+    cmd/internal/goobj.s                                                     12262    12327    +65     +0.530%
+    internal/fuzz.s                                                          88446    89608    +1162   +1.314%
+    cmd/vendor/golang.org/x/arch/ppc64/ppc64asm.s                            36435    37026    +591    +1.622%
+    cmd/internal/dwarf.s                                                     28919    29476    +557    +1.926%
+    cmd/internal/edit.s                                                      3375     3428     +53     +1.570%
+    cmd/vendor/golang.org/x/arch/x86/x86asm.s                                70465    70187    -278    -0.395%
+    cmd/internal/pkgpath.s                                                   4922     4422     -500    -10.158%
+    net/http.s                                                               548512   541160   -7352   -1.340%
+    cmd/internal/archive.s                                                   11103    11111    +8      +0.072%
+    testing/internal/testdeps.s                                              6384     6427     +43     +0.674%
+    cmd/internal/quoted.s                                                    2374     2708     +334    +14.069%
+    cmd/compile/internal/abt.s                                               15188    14795    -393    -2.588%
+    cmd/internal/gcprog.s                                                    6090     6131     +41     +0.673%
+    cmd/internal/codesign.s                                                  4395     4406     +11     +0.250%
+    go/types.s                                                               478152   479038   +886    +0.185%
+    cmd/internal/obj.s                                                       121049   114662   -6387   -5.276%
+    cmd/compile/internal/syntax.s                                            157912   156897   -1015   -0.643%
+    expvar.s                                                                 8906     8586     -320    -3.593%
+    net/http/cgi.s                                                           17411    17782    +371    +2.131%
+    net/http/cookiejar.s                                                     13763    13931    +168    +1.221%
+    net/http/httptest.s                                                      16213    16785    +572    +3.528%
+    net/http/pprof.s                                                         14556    14739    +183    +1.257%
+    net/http/httputil.s                                                      43808    44406    +598    +1.365%
+    net/rpc.s                                                                32868    30581    -2287   -6.958%
+    go/internal/gccgoimporter.s                                              45024    45409    +385    +0.855%
+    go/internal/gcimporter.s                                                 58540    53044    -5496   -9.388%
+    go/internal/srcimporter.s                                                10011    10451    +440    +4.395%
+    net/http/fcgi.s                                                          18344    18039    -305    -1.663%
+    cmd/internal/objfile.s                                                   45853    46153    +300    +0.654%
+    cmd/api.s                                                                34943    35806    +863    +2.470%
+    cmd/internal/obj/arm.s                                                   61126    61156    +30     +0.049%
+    net/rpc/jsonrpc.s                                                        5601     5271     -330    -5.892%
+    cmd/internal/obj/loong64.s                                               45594    45335    -259    -0.568%
+    cmd/internal/obj/arm64.s                                                 140572   140006   -566    -0.403%
+    cmd/internal/obj/mips.s                                                  53672    53637    -35     -0.065%
+    go/importer.s                                                            1989     2169     +180    +9.050%
+    cmd/internal/obj/riscv.s                                                 56721    56877    +156    +0.275%
+    cmd/addr2line.s                                                          1930     1906     -24     -1.244%
+    cmd/internal/obj/ppc64.s                                                 137317   115306   -22011  -16.029%
+    cmd/internal/obj/wasm.s                                                  34091    34162    +71     +0.208%
+    cmd/internal/obj/s390x.s                                                 110244   110444   +200    +0.181%
+    cmd/asm/internal/flags.s                                                 2234     2351     +117    +5.237%
+    cmd/internal/obj/x86.s                                                   86811    87534    +723    +0.833%
+    cmd/internal/buildid.s                                                   17303    17156    -147    -0.850%
+    cmd/compile/internal/base.s                                              29582    29675    +93     +0.314%
+    cmd/compile/internal/logopt.s                                            9859     9943     +84     +0.852%
+    cmd/cgo.s                                                                198958   203063   +4105   +2.063%
+    cmd/internal/browser.s                                                   1751     1803     +52     +2.970%
+    cmd/vendor/golang.org/x/tools/cover.s                                    9752     9759     +7      +0.072%
+    cmd/asm/internal/lex.s                                                   22668    21352    -1316   -5.806%
+    cmd/asm/internal/arch.s                                                  27642    29863    +2221   +8.035%
+    cmd/compile/internal/bitvec.s                                            5535     5542     +7      +0.126%
+    cmd/compile/internal/types.s                                             74646    74488    -158    -0.212%
+    cmd/dist.s                                                               185287   184450   -837    -0.452%
+    cmd/compile/internal/types2.s                                            477270   470783   -6487   -1.359%
+    cmd/cover.s                                                              29563    31341    +1778   +6.014%
+    cmd/doc.s                                                                54013    53299    -714    -1.322%
+    cmd/go/internal/fsys.s                                                   16751    16944    +193    +1.152%
+    cmd/fix.s                                                                64367    65866    +1499   +2.329%
+    cmd/asm/internal/asm.s                                                   60266    60767    +501    +0.831%
+    cmd/compile/internal/ir.s                                                252952   187941   -65011  -25.701%
+    cmd/go/internal/str.s                                                    3582     3690     +108    +3.015%
+    cmd/go/internal/lockedfile/internal/filelock.s                           2062     1960     -102    -4.947%
+    cmd/go/internal/cfg.s                                                    11331    11253    -78     -0.688%
+    cmd/asm.s                                                                2461     2474     +13     +0.528%
+    cmd/compile/internal/deadcode.s                                          5576     5812     +236    +4.232%
+    cmd/compile/internal/objw.s                                              5553     5450     -103    -1.855%
+    cmd/go/internal/par.s                                                    4473     4378     -95     -2.124%
+    cmd/compile/internal/abi.s                                               19219    19382    +163    +0.848%
+    cmd/go/internal/lockedfile.s                                             22412    14422    -7990   -35.651%
+    cmd/go/internal/auth.s                                                   2218     2250     +32     +1.443%
+    cmd/vendor/golang.org/x/mod/internal/lazyregexp.s                        2389     2284     -105    -4.395%
+    cmd/go/internal/base.s                                                   10079    10177    +98     +0.972%
+    cmd/go/internal/imports.s                                                16417    16159    -258    -1.572%
+    cmd/go/internal/trace.s                                                  4888     4895     +7      +0.143%
+    cmd/go/internal/web.s                                                    12130    12007    -123    -1.014%
+    cmd/vendor/golang.org/x/mod/sumdb/tlog.s                                 27662    28441    +779    +2.816%
+    cmd/vendor/golang.org/x/mod/module.s                                     20503    20758    +255    +1.244%
+    cmd/vendor/golang.org/x/mod/sumdb/dirhash.s                              3599     3601     +2      +0.056%
+    cmd/go/internal/cache.s                                                  23949    24705    +756    +3.157%
+    cmd/go/internal/cmdflag.s                                                3769     3748     -21     -0.557%
+    cmd/go/internal/search.s                                                 15584    15917    +333    +2.137%
+    cmd/vendor/golang.org/x/mod/sumdb/note.s                                 14260    14347    +87     +0.610%
+    cmd/internal/test2json.s                                                 8706     8575     -131    -1.505%
+    cmd/go/internal/tool.s                                                   2762     2756     -6      -0.217%
+    cmd/vendor/golang.org/x/mod/zip.s                                        36841    37335    +494    +1.341%
+    cmd/go/internal/mvs.s                                                    27581    30511    +2930   +10.623%
+    cmd/go/internal/modfetch/codehost.s                                      80858    76219    -4639   -5.737%
+    cmd/go/internal/version.s                                                3050     3046     -4      -0.131%
+    cmd/vendor/golang.org/x/mod/modfile.s                                    99002    98074    -928    -0.937%
+    cmd/go/internal/test/internal/genflags.s                                 2025     2032     +7      +0.346%
+    cmd/vendor/golang.org/x/sync/semaphore.s                                 2220     2210     -10     -0.450%
+    cmd/go/internal/vcs.s                                                    43959    45346    +1387   +3.155%
+    cmd/vendor/golang.org/x/mod/sumdb.s                                      27952    28265    +313    +1.120%
+    cmd/go/internal/modindex.s                                               79377    82223    +2846   +3.585%
+    cmd/compile/internal/typecheck.s                                         317102   310352   -6750   -2.129%
+    cmd/link/internal/benchmark.s                                            3621     3680     +59     +1.629%
+    cmd/link/internal/sym.s                                                  1816     1805     -11     -0.606%
+    cmd/go/internal/modconv.s                                                14909    14895    -14     -0.094%
+    cmd/gofmt.s                                                              29575    29779    +204    +0.690%
+    cmd/link/internal/dwtest.s                                               3879     3909     +30     +0.773%
+    cmd/vendor/golang.org/x/sys/unix.s                                       118975   119232   +257    +0.216%
+    cmd/nm.s                                                                 4675     4718     +43     +0.920%
+    cmd/go/internal/modfetch.s                                               111400   112088   +688    +0.618%
+    cmd/compile/internal/compare.s                                           11311    10693    -618    -5.464%
+    cmd/compile/internal/staticdata.s                                        14014    14277    +263    +1.877%
+    cmd/compile/internal/devirtualize.s                                      2548     2144     -404    -15.856%
+    cmd/compile/internal/inline.s                                            37591    37993    +402    +1.069%
+    cmd/compile/internal/escape.s                                            69777    68692    -1085   -1.555%
+    cmd/compile/internal/importer.s                                          52920    48544    -4376   -8.269%
+    cmd/internal/osinfo.s                                                    501      698      +197    +39.321%
+    cmd/link/internal/loader.s                                               79034    75315    -3719   -4.706%
+    cmd/pack.s                                                               8512     8600     +88     +1.034%
+    cmd/vendor/github.com/google/pprof/internal/elfexec.s                    5636     5711     +75     +1.331%
+    cmd/vendor/github.com/google/pprof/profile.s                             143898   145834   +1936   +1.345%
+    cmd/compile/internal/reflectdata.s                                       80184    81399    +1215   +1.515%
+    cmd/vendor/golang.org/x/term.s                                           24431    24478    +47     +0.192%
+    cmd/go/internal/modload.s                                                273375   282247   +8872   +3.245%
+    cmd/link/internal/loadpe.s                                               19813    17572    -2241   -11.311%
+    cmd/link/internal/loadmacho.s                                            20848    20767    -81     -0.389%
+    cmd/link/internal/loadelf.s                                              24458    23896    -562    -2.298%
+    cmd/link/internal/loadxcoff.s                                            11183    8913     -2270   -20.299%
+    cmd/vendor/github.com/ianlancetaylor/demangle.s                          264095   268313   +4218   +1.597%
+    cmd/compile/internal/staticinit.s                                        13176    13292    +116    +0.880%
+    cmd/go/internal/help.s                                                   5180     5320     +140    +2.703%
+    cmd/go/internal/workcmd.s                                                17702    17368    -334    -1.887%
+    cmd/test2json.s                                                          1581     1427     -154    -9.741%
+    cmd/vendor/github.com/google/pprof/internal/measurement.s                8449     8700     +251    +2.971%
+    cmd/go/internal/load.s                                                   123087   125064   +1977   +1.606%
+    cmd/vendor/golang.org/x/tools/internal/analysisinternal.s                11481    12506    +1025   +8.928%
+    cmd/vendor/golang.org/x/tools/internal/typeparams.s                      15239    15796    +557    +3.655%
+    cmd/vendor/github.com/google/pprof/internal/symbolz.s                    4760     4805     +45     +0.945%
+    cmd/vendor/github.com/google/pprof/internal/binutils.s                   37975    37526    -449    -1.182%
+    cmd/vendor/github.com/google/pprof/internal/graph.s                      47850    47968    +118    +0.247%
+    cmd/go/internal/fmtcmd.s                                                 2319     2373     +54     +2.329%
+    cmd/vendor/github.com/google/pprof/internal/symbolizer.s                 10195    10268    +73     +0.716%
+    cmd/vendor/golang.org/x/tools/go/analysis.s                              5790     6021     +231    +3.990%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/internal/analysisutil.s 2246     2519     +273    +12.155%
+    cmd/vendor/golang.org/x/tools/go/types/objectpath.s                      15720    16601    +881    +5.604%
+    cmd/vendor/golang.org/x/tools/go/ast/inspector.s                         4537     5777     +1240   +27.331%
+    cmd/go/internal/modcmd.s                                                 47192    47738    +546    +1.157%
+    cmd/vendor/golang.org/x/tools/go/analysis/internal/analysisflags.s       13575    14348    +773    +5.694%
+    cmd/vendor/github.com/google/pprof/internal/report.s                     79257    80089    +832    +1.050%
+    cmd/link/internal/ld.s                                                   553166   554375   +1209   +0.219%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/asmdecl.s               29123    29957    +834    +2.864%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/inspect.s               638      818      +180    +28.213%
+    cmd/vendor/golang.org/x/tools/go/analysis/internal/facts.s               12934    13735    +801    +6.193%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/buildtag.s              6903     7148     +245    +3.549%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/cgocall.s               7953     8549     +596    +7.494%
+    cmd/go/internal/work.s                                                   271866   275488   +3622   +1.332%
+    cmd/trace.s                                                              98068    98671    +603    +0.615%
+    cmd/vendor/github.com/google/pprof/internal/driver.s                     145066   145844   +778    +0.536%
+    cmd/link/internal/amd64.s                                                15589    15625    +36     +0.231%
+    cmd/link/internal/arm.s                                                  16490    16541    +51     +0.309%
+    cmd/link/internal/arm64.s                                                31835    31684    -151    -0.474%
+    cmd/go/internal/envcmd.s                                                 21012    20787    -225    -1.071%
+    cmd/go/internal/clean.s                                                  9306     9233     -73     -0.784%
+    cmd/go/internal/fix.s                                                    1906     2086     +180    +9.444%
+    cmd/go/internal/generate.s                                               10509    10758    +249    +2.369%
+    cmd/go/internal/get.s                                                    13782    14075    +293    +2.126%
+    cmd/go/internal/run.s                                                    4852     4914     +62     +1.278%
+    cmd/go/internal/list.s                                                   19576    19097    -479    -2.447%
+    cmd/go/internal/bug.s                                                    6253     5720     -533    -8.524%
+    cmd/go/internal/modget.s                                                 58449    59583    +1134   +1.940%
+    cmd/go/internal/vet.s                                                    7384     7228     -156    -2.113%
+    cmd/go/internal/test.s                                                   59654    60193    +539    +0.904%
+    cmd/link/internal/riscv64.s                                              9856     9931     +75     +0.761%
+    cmd/link/internal/ppc64.s                                                28471    27046    -1425   -5.005%
+    cmd/link/internal/s390x.s                                                15081    15524    +443    +2.937%
+    cmd/link/internal/wasm.s                                                 16770    16817    +47     +0.280%
+    cmd/link/internal/x86.s                                                  14008    14093    +85     +0.607%
+    cmd/vendor/github.com/google/pprof/driver.s                              8046     8124     +78     +0.969%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/assign.s                2010     2193     +183    +9.104%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/atomic.s                2132     2335     +203    +9.522%
+    cmd/go.s                                                                 6341     6546     +205    +3.233%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/bools.s                 6078     6348     +270    +4.442%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/composite.s             4457     4789     +332    +7.449%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/copylock.s              8814     9375     +561    +6.365%
+    cmd/link.s                                                               3829     4373     +544    +14.207%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/framepointer.s          2007     2265     +258    +12.855%
+    cmd/pprof.s                                                              9881     10052    +171    +1.731%
+    cmd/vendor/golang.org/x/tools/go/cfg.s                                   26215    27546    +1331   +5.077%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/httpresponse.s          3500     4205     +705    +20.143%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/ifaceassert.s           4790     5407     +617    +12.881%
+    cmd/vendor/golang.org/x/tools/go/ast/astutil.s                           50786    55269    +4483   +8.827%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/nilfunc.s               1754     2033     +279    +15.906%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/shift.s                 4514     5262     +748    +16.571%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/sigchanyzer.s           3455     3687     +232    +6.715%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/stdmethods.s            8064     8249     +185    +2.294%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/stringintconv.s         4547     4900     +353    +7.763%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/structtag.s             6975     7584     +609    +8.731%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/testinggoroutine.s      3375     3670     +295    +8.741%
+    cmd/vendor/golang.org/x/tools/go/types/typeutil.s                        12924    13870    +946    +7.320%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/unsafeptr.s             3251     3557     +306    +9.412%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/unreachable.s           6121     7575     +1454   +23.754%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/tests.s                 13925    14409    +484    +3.476%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/unusedresult.s          2953     3159     +206    +6.976%
+    cmd/vendor/golang.org/x/tools/go/analysis/unitchecker.s                  11563    11962    +399    +3.451%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/errorsas.s              1735     1933     +198    +11.412%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/ctrlflow.s              4241     4486     +245    +5.777%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/loopclosure.s           3107     3460     +353    +11.361%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/unmarshal.s             1879     2141     +262    +13.944%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/printf.s                28740    29317    +577    +2.008%
+    cmd/vendor/golang.org/x/tools/go/analysis/passes/lostcancel.s            7188     7930     +742    +10.323%
+    cmd/vet.s                                                                1374     1554     +180    +13.100%
+    cmd/compile/internal/ssa.s                                               3631074  3571680  -59394  -1.636%
+    cmd/compile/internal/liveness.s                                          40423    40726    +303    +0.750%
+    cmd/compile/internal/ssagen.s                                            361816   362743   +927    +0.256%
+    cmd/compile/internal/mips64.s                                            16298    16330    +32     +0.196%
+    cmd/compile/internal/loong64.s                                           17376    17440    +64     +0.368%
+    cmd/compile/internal/mips.s                                              16121    16153    +32     +0.198%
+    cmd/compile/internal/arm64.s                                             29294    29346    +52     +0.178%
+    cmd/compile/internal/arm.s                                               26850    26882    +32     +0.119%
+    cmd/compile/internal/amd64.s                                             30945    31034    +89     +0.288%
+    cmd/compile/internal/dwarfgen.s                                          34464    35065    +601    +1.744%
+    cmd/compile/internal/ppc64.s                                             31621    31733    +112    +0.354%
+    cmd/compile/internal/wasm.s                                              11851    11889    +38     +0.321%
+    cmd/compile/internal/s390x.s                                             24168    24183    +15     +0.062%
+    cmd/compile/internal/x86.s                                               18090    18079    -11     -0.061%
+    cmd/compile/internal/walk.s                                              295003   295945   +942    +0.319%
+    cmd/compile/internal/noder.s                                             405458   403775   -1683   -0.415%
+    cmd/compile/internal/pkginit.s                                           30757    31951    +1194   +3.882%
+    cmd/compile/internal/gc.s                                                18788    18880    +92     +0.490%
+    total                                                                    20334984 20041049 -293935 -1.445%
+    package runtime/race/internal/amd64v3 was deleted
+    package runtime/race/internal/amd64v1 was deleted
+    
+    Change-Id: Ibcd71480da1b53cfec4fa16c20f222b9a195e6da
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/431797
+    Reviewed-by: Keith Randall <khr@google.com>
+    Run-TryBot: Jakub Ciolek <jakub@ciolek.dev>
+    Reviewed-by: Keith Randall <khr@golang.org>
+    Reviewed-by: Than McIntosh <thanm@google.com>
+    Run-TryBot: Keith Randall <khr@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/compile/internal/ssa/prove.go | 47 ++++++++++++++++++++++++++++++++++-
+ 1 file changed, 46 insertions(+), 1 deletion(-)
+
+commit 3a41094107237535673bdbbdaabc10e54cb2b67c
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Fri Nov 4 17:01:21 2022 +0800
+
+    runtime: using wyrand for fastrand on linux/loong64
+    
+    Benchmarks on linux/loong64:
+    name               old time/op    new time/op    delta
+    Fastrand           4.06ns ± 0%    3.60ns ± 0%    -11.29%  (p=0.000 n=32+27)
+    Fastrand64         7.20ns ± 0%    7.16ns ± 0%     -0.52%  (p=0.000 n=23+31)
+    FastrandHashiter   49.5ns ± 1%    48.9ns ± 2%     -1.24%  (p=0.000 n=32+32)
+    Fastrandn/2        4.45ns ± 0%    3.81ns ± 0%    -14.37%  (p=0.000 n=32+32)
+    Fastrandn/3        4.45ns ± 0%    3.81ns ± 0%    -14.32%  (p=0.000 n=32+32)
+    Fastrandn/4        4.45ns ± 0%    3.81ns ± 0%    -14.33%  (p=0.000 n=31+32)
+    Fastrandn/5        4.44ns ± 0%    3.81ns ± 0%    -14.26%  (p=0.000 n=31+30)
+    
+    Change-Id: I0aba7d2331221426c44cc0d0dddecca3b585fda4
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/446896
+    Reviewed-by: Keith Randall <khr@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Reviewed-by: Keith Randall <khr@golang.org>
+
+ src/runtime/stubs.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 268f4629df14f5b256ba51b78e1cf5799ce9818b
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Sat Jul 9 19:26:47 2022 +0800
+
+    cmd/compile: enable brachelim pass on loong64
+    
+    Change-Id: I4fd1c307901c265ab9865bf8a74460ddc15e5d14
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/416735
+    Reviewed-by: Keith Randall <khr@google.com>
+    Reviewed-by: xiaodong liu <teaofmoli@gmail.com>
+    Auto-Submit: Wayne Zuo <wdvxdr@golangcn.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+
+ src/cmd/compile/internal/loong64/ssa.go         |  7 ++++
+ src/cmd/compile/internal/ssa/_gen/LOONG64.rules |  4 ++
+ src/cmd/compile/internal/ssa/_gen/LOONG64Ops.go |  3 ++
+ src/cmd/compile/internal/ssa/branchelim.go      | 11 ++++-
+ src/cmd/compile/internal/ssa/opGen.go           | 30 ++++++++++++++
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go  | 55 +++++++++++++++++++++++++
+ test/codegen/condmove.go                        | 18 ++++++++
+ 7 files changed, 127 insertions(+), 1 deletion(-)
+
+commit c1c6b0ca79233c8b7612957291c2d47d337cc2de
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Mon Jul 4 10:16:12 2022 +0800
+
+    cmd/compile: remove the resultInArg0 register checks on linux/loong64
+    
+    The automatic resultInArg0 register check has been implemented by CL 296010.
+    
+    Change-Id: Id0e085ded9aa097bd02593c359a750d938a3aaa6
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/416034
+    Reviewed-by: Keith Randall <khr@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Keith Randall <khr@google.com>
+    Reviewed-by: Wayne Zuo <wdvxdr@golangcn.org>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: Bryan Mills <bcmills@google.com>
+
+ src/cmd/compile/internal/loong64/ssa.go | 3 ---
+ 1 file changed, 3 deletions(-)
+
+commit 8a9e2d9d49a9d5234b52a0360ed6a0f91753c291
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Tue Jun 28 15:46:00 2022 +0800
+
+    cmd/compile: add missing tail calls flag for linux/loong64
+    
+    Set the value of the variable tailCall to true and prevent
+    allocating or clobber the linker register.
+    
+    Change-Id: I4ec19c67056cb99196911aa7c0054be89ab7eb8d
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/414954
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+
+ src/cmd/compile/internal/ssa/_gen/LOONG64Ops.go | 2 +-
+ src/cmd/compile/internal/ssa/opGen.go           | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+commit c87e69c2b49e27d0e68709eb9623f2f03eb15267
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Mon Jun 27 20:36:27 2022 +0800
+
+    runtime/internal/atomic: enable atomic 64bit types for all functions on linux/loong64
+    
+    ref. CL 356169
+    
+    Change-Id: I813750d3fe191afe50d4029024ba97800211f688
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/414414
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: Heschi Kreinick <heschi@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/runtime/internal/atomic/atomic_loong64.go | 6 ++++++
+ src/runtime/internal/atomic/atomic_loong64.s  | 7 +++++++
+ src/runtime/internal/atomic/types_64bit.go    | 2 +-
+ 3 files changed, 14 insertions(+), 1 deletion(-)
+
+commit 90a352742754cd8731302f23bfa4a47f0b3f5f40
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Tue Sep 6 22:29:31 2022 +0800
+
+    cmd/compile: intrinsify Sub64 on loong64
+    
+    This is a follow up of CL 420095  on loong64.
+    
+    file                                    before    after     Δ       %
+    compile/internal/ssa.a                  35649482  35653274  +3792   +0.011%
+    compile/internal/ssagen.a               4099858   4098728   -1130   -0.028%
+    ecdh.a                                  227896    226896    -1000   -0.439%
+    internal/nistec/fiat.a                  1212254   1128184   -84070  -6.935%
+    tls.a                                   3256800   3256802   +2      +0.000%
+    big.a                                   1708518   1702496   -6022   -0.352%
+    bits.a                                  106762    105734    -1028   -0.963%
+    math.a                                  578762    577288    -1474   -0.255%
+    netip.a                                 555922    555610    -312    -0.056%
+    net.a                                   3286528   3286530   +2      +0.000%
+    golang.org/x/crypto/internal/poly1305.a 109546    107686    -1860   -1.698%
+    total                                   260392768 260299668 -93100  -0.036%
+    
+    Change-Id: Ieffca705aae5666501f284502d986ca179dde494
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/428557
+    Reviewed-by: Carlos Amedee <carlos@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+
+ src/cmd/compile/internal/ssa/_gen/LOONG64.rules |  4 +++
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go  | 38 +++++++++++++++++++++++++
+ src/cmd/compile/internal/ssagen/ssa.go          |  4 +--
+ test/codegen/mathbits.go                        |  8 ++++++
+ 4 files changed, 52 insertions(+), 2 deletions(-)
+
+commit 97760ed651f88341bcf15aa4980863c199b6f3dc
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Tue Sep 6 22:12:16 2022 +0800
+
+    cmd/compile: intrinsify Add64 on loong64
+    
+    This is a follow up of CL 420094  on loong64.
+    
+    Reduce go toolchain size slightly on linux/loong64.
+    
+    compilecmp HEAD~1 -> HEAD
+    HEAD~1 (8a32354219): internal/trace: use strings.Builder
+    HEAD (1767784ac3): cmd/compile: intrinsify Add64 on loong64
+    platform: linux/loong64
+    
+    file      before    after     Δ       %
+    addr2line 3882616   3882536   -80     -0.002%
+    api       5528866   5528450   -416    -0.008%
+    asm       5133780   5133796   +16     +0.000%
+    cgo       4668787   4668491   -296    -0.006%
+    compile   25163409  25164729  +1320   +0.005%
+    cover     4658055   4658007   -48     -0.001%
+    dist      3437783   3437727   -56     -0.002%
+    doc       3883069   3883205   +136    +0.004%
+    fix       3383254   3383070   -184    -0.005%
+    link      6747559   6747023   -536    -0.008%
+    nm        3793923   3793939   +16     +0.000%
+    objdump   4256628   4256812   +184    +0.004%
+    pack      2356328   2356144   -184    -0.008%
+    pprof     14233370  14131910  -101460 -0.713%
+    test2json 2638668   2638476   -192    -0.007%
+    trace     13392065  13360781  -31284  -0.234%
+    vet       7456388   7455588   -800    -0.011%
+    total     132498256 132364392 -133864 -0.101%
+    
+    file                                    before    after     Δ       %
+    compile/internal/ssa.a                  35644590  35649482  +4892   +0.014%
+    compile/internal/ssagen.a               4101250   4099858   -1392   -0.034%
+    internal/edwards25519/field.a           226064    201718    -24346  -10.770%
+    internal/nistec/fiat.a                  1689922   1212254   -477668 -28.266%
+    tls.a                                   3256798   3256800   +2      +0.000%
+    big.a                                   1718552   1708518   -10034  -0.584%
+    bits.a                                  107786    106762    -1024   -0.950%
+    cmplx.a                                 169434    168214    -1220   -0.720%
+    math.a                                  581302    578762    -2540   -0.437%
+    netip.a                                 556096    555922    -174    -0.031%
+    net.a                                   3286526   3286528   +2      +0.000%
+    runtime.a                               8644786   8644510   -276    -0.003%
+    strconv.a                               519098    518374    -724    -0.139%
+    golang.org/x/crypto/internal/poly1305.a 115398    109546    -5852   -5.071%
+    total                                   260913122 260392768 -520354 -0.199%
+    
+    Change-Id: I75b2bb7761fa5a0d0d032d4ebe3582d092ea77be
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/428556
+    Reviewed-by: Carlos Amedee <carlos@golang.org>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/compile/internal/ssa/_gen/LOONG64.rules |  8 ++++
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go  | 60 +++++++++++++++++++++++++
+ src/cmd/compile/internal/ssagen/ssa.go          | 12 ++---
+ test/codegen/mathbits.go                        |  7 +++
+ 4 files changed, 81 insertions(+), 6 deletions(-)
+
+commit e8f0340fa483c6deb0bf7bba9788a2dd0f2f8a59
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Tue Aug 9 23:53:37 2022 +0800
+
+    cmd/compile: intrinsify RotateLeft{32,64} on loong64
+    
+    Benchmark on crypto/sha256 (provided by Xiaodong Liu):
+    name               old time/op    new time/op    delta
+    Hash8Bytes/New       1.19µs ± 0%    0.97µs ± 0%  -18.75%  (p=0.000 n=9+9)
+    Hash8Bytes/Sum224    1.21µs ± 0%    0.97µs ± 0%  -20.04%  (p=0.000 n=9+10)
+    Hash8Bytes/Sum256    1.21µs ± 0%    0.98µs ± 0%  -19.16%  (p=0.000 n=10+7)
+    Hash1K/New           15.9µs ± 0%    12.4µs ± 0%  -22.10%  (p=0.000 n=10+10)
+    Hash1K/Sum224        15.9µs ± 0%    12.4µs ± 0%  -22.18%  (p=0.000 n=8+10)
+    Hash1K/Sum256        15.9µs ± 0%    12.4µs ± 0%  -22.15%  (p=0.000 n=10+9)
+    Hash8K/New            119µs ± 0%      92µs ± 0%  -22.40%  (p=0.000 n=10+9)
+    Hash8K/Sum224         119µs ± 0%      92µs ± 0%  -22.41%  (p=0.000 n=9+10)
+    Hash8K/Sum256         119µs ± 0%      92µs ± 0%  -22.40%  (p=0.000 n=9+9)
+    
+    name               old speed      new speed      delta
+    Hash8Bytes/New     6.70MB/s ± 0%  8.25MB/s ± 0%  +23.13%  (p=0.000 n=10+10)
+    Hash8Bytes/Sum224  6.60MB/s ± 0%  8.26MB/s ± 0%  +25.06%  (p=0.000 n=10+10)
+    Hash8Bytes/Sum256  6.59MB/s ± 0%  8.15MB/s ± 0%  +23.67%  (p=0.000 n=10+7)
+    Hash1K/New         64.3MB/s ± 0%  82.5MB/s ± 0%  +28.36%  (p=0.000 n=10+10)
+    Hash1K/Sum224      64.3MB/s ± 0%  82.6MB/s ± 0%  +28.51%  (p=0.000 n=10+10)
+    Hash1K/Sum256      64.3MB/s ± 0%  82.6MB/s ± 0%  +28.46%  (p=0.000 n=9+9)
+    Hash8K/New         69.0MB/s ± 0%  89.0MB/s ± 0%  +28.87%  (p=0.000 n=10+8)
+    Hash8K/Sum224      69.0MB/s ± 0%  89.0MB/s ± 0%  +28.88%  (p=0.000 n=9+10)
+    Hash8K/Sum256      69.0MB/s ± 0%  88.9MB/s ± 0%  +28.87%  (p=0.000 n=8+9)
+    
+    Benchmark on crypto/sha512 (provided by Xiaodong Liu):
+    name               old time/op    new time/op     delta
+    Hash8Bytes/New       1.55µs ± 0%     1.31µs ± 0%  -15.67%  (p=0.000 n=10+10)
+    Hash8Bytes/Sum384    1.59µs ± 0%     1.35µs ± 0%  -14.97%  (p=0.000 n=10+10)
+    Hash8Bytes/Sum512    1.62µs ± 0%     1.39µs ± 0%  -14.02%  (p=0.000 n=10+10)
+    Hash1K/New           10.7µs ± 0%      8.6µs ± 0%  -19.60%  (p=0.000 n=8+8)
+    Hash1K/Sum384        10.8µs ± 0%      8.7µs ± 0%  -19.40%  (p=0.000 n=9+9)
+    Hash1K/Sum512        10.8µs ± 0%      8.7µs ± 0%  -19.35%  (p=0.000 n=9+10)
+    Hash8K/New           74.6µs ± 0%     59.6µs ± 0%  -20.08%  (p=0.000 n=10+9)
+    Hash8K/Sum384        74.7µs ± 0%     59.7µs ± 0%  -20.04%  (p=0.000 n=9+8)
+    Hash8K/Sum512        74.7µs ± 0%     59.7µs ± 0%  -20.01%  (p=0.000 n=10+10)
+    
+    name               old speed      new speed       delta
+    Hash8Bytes/New     5.16MB/s ± 0%   6.12MB/s ± 0%  +18.60%  (p=0.000 n=10+8)
+    Hash8Bytes/Sum384  5.02MB/s ± 0%   5.90MB/s ± 0%  +17.56%  (p=0.000 n=10+10)
+    Hash8Bytes/Sum512  4.94MB/s ± 0%   5.74MB/s ± 0%  +16.29%  (p=0.000 n=10+9)
+    Hash1K/New         95.4MB/s ± 0%  118.6MB/s ± 0%  +24.38%  (p=0.000 n=10+10)
+    Hash1K/Sum384      95.0MB/s ± 0%  117.9MB/s ± 0%  +24.06%  (p=0.000 n=8+9)
+    Hash1K/Sum512      94.8MB/s ± 0%  117.5MB/s ± 0%  +23.99%  (p=0.000 n=8+9)
+    Hash8K/New          110MB/s ± 0%    137MB/s ± 0%  +25.11%  (p=0.000 n=9+6)
+    Hash8K/Sum384       110MB/s ± 0%    137MB/s ± 0%  +25.07%  (p=0.000 n=9+8)
+    Hash8K/Sum512       110MB/s ± 0%    137MB/s ± 0%  +25.01%  (p=0.000 n=10+10)
+    
+    Change-Id: I28ccfce634659305a336c8e0a3f8589f7361d661
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/422317
+    Reviewed-by: Keith Randall <khr@golang.org>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/cmd/compile/internal/loong64/ssa.go        |  4 ++
+ src/cmd/compile/internal/ssa/gen/LOONG64.rules |  6 +-
+ src/cmd/compile/internal/ssa/gen/LOONG64Ops.go | 16 +++--
+ src/cmd/compile/internal/ssa/opGen.go          | 60 +++++++++++++++++
+ src/cmd/compile/internal/ssa/rewrite.go        |  2 +-
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go | 92 +++++++++++++++-----------
+ src/cmd/compile/internal/ssagen/ssa.go         |  4 +-
+ test/codegen/rotate.go                         | 12 ++++
+ 8 files changed, 147 insertions(+), 49 deletions(-)
+
+commit 7d574466a9bd001feea4717933adb6ab78acd05f
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Tue Aug 9 23:08:57 2022 +0800
+
+    cmd/internal/obj/loong64: add ROTR, ROTRV instructions support
+    
+    Reference: https://loongson.github.io/LoongArch-Documentation/LoongArch-Vol1-EN.html
+    
+    Change-Id: I29adb84eb70bffd963c79ed6957a5197896fb2bf
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/422316
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/cmd/asm/internal/asm/testdata/loong64enc1.s |  8 ++++++++
+ src/cmd/internal/obj/loong64/a.out.go           |  2 ++
+ src/cmd/internal/obj/loong64/anames.go          |  2 ++
+ src/cmd/internal/obj/loong64/asm.go             | 14 +++++++++++++-
+ 4 files changed, 25 insertions(+), 1 deletion(-)
+
+commit 1dcef7b3bdcea4a829ea22c821e6a9484c325d61
+Author: Wayne Zuo <wdvxdr@golangcn.org>
+Date:   Sat Jul 9 11:28:50 2022 +0800
+
+    cmd/internal/obj/loong64: add MASKEQZ and MASKNEZ instructions support
+    
+    Change-Id: Ied16c3be47c863a94d46bd568191057ded4b7d0a
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/416734
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Wayne Zuo <wdvxdr@golangcn.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: xiaodong liu <teaofmoli@gmail.com>
+
+ src/cmd/asm/internal/asm/testdata/loong64enc1.s | 3 +++
+ src/cmd/internal/obj/loong64/a.out.go           | 3 +++
+ src/cmd/internal/obj/loong64/anames.go          | 2 ++
+ src/cmd/internal/obj/loong64/asm.go             | 8 ++++++++
+ 4 files changed, 16 insertions(+)
+
+commit 021fd86ce12ac694db778f6998d12c1e8d8c63ca
+Author: Tobias Klauser <tklauser@distanz.ch>
+Date:   Tue Aug 9 10:20:22 2022 +0200
+
+    syscall: implement EpollCreate using EpollCreate1 on all linux platforms
+    
+    Most newer architectures (e.g. arm64, riscv64, loong64) don't provide the
+    epoll_create syscall. Some systems (e.g. Android) block it even if it
+    were available. In the kernel, the epoll_create syscall is implemented
+    [1] the same way EpollCreate is implemented in this package for
+    platforms without the epoll_create syscall. The epoll_create1 syscall is
+    available since Linux kernel 2.6.27 and the minimum required kernel
+    version is 2.6.32 since Go 1.18 (see #45964). Thus, avoid the separate
+    wrapper and consistently implement EpollCreate using EpollCreate1.
+    
+    [1] https://elixir.bootlin.com/linux/v5.15-rc1/source/fs/eventpoll.c#L2006
+    
+    The same change was already done in CL 349809 for golang.org/x/sys/unix.
+    
+    For #45964
+    
+    Change-Id: I5463b208aa7ae236fa2c175d6d3ec6568f1840b0
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/411594
+    Reviewed-by: Bryan Mills <bcmills@google.com>
+    Auto-Submit: Tobias Klauser <tobias.klauser@gmail.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Tobias Klauser <tobias.klauser@gmail.com>
+
+ src/syscall/syscall_linux.go           |  7 +++++++
+ src/syscall/syscall_linux_386.go       |  1 -
+ src/syscall/syscall_linux_amd64.go     |  1 -
+ src/syscall/syscall_linux_arm.go       |  1 -
+ src/syscall/syscall_linux_arm64.go     |  7 -------
+ src/syscall/syscall_linux_loong64.go   |  7 -------
+ src/syscall/syscall_linux_mips64x.go   |  1 -
+ src/syscall/syscall_linux_mipsx.go     |  1 -
+ src/syscall/syscall_linux_ppc64x.go    |  1 -
+ src/syscall/syscall_linux_riscv64.go   |  7 -------
+ src/syscall/syscall_linux_s390x.go     |  1 -
+ src/syscall/zsyscall_linux_386.go      | 11 -----------
+ src/syscall/zsyscall_linux_amd64.go    | 11 -----------
+ src/syscall/zsyscall_linux_arm.go      | 11 -----------
+ src/syscall/zsyscall_linux_mips.go     | 11 -----------
+ src/syscall/zsyscall_linux_mips64.go   | 11 -----------
+ src/syscall/zsyscall_linux_mips64le.go | 11 -----------
+ src/syscall/zsyscall_linux_mipsle.go   | 11 -----------
+ src/syscall/zsyscall_linux_ppc64.go    | 11 -----------
+ src/syscall/zsyscall_linux_ppc64le.go  | 11 -----------
+ src/syscall/zsyscall_linux_s390x.go    | 11 -----------
+ 21 files changed, 7 insertions(+), 138 deletions(-)
+
+commit 2c5b1746164581c7393a7a7f7ba796e823af0248
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Wed Aug 3 19:43:49 2022 +0800
+
+    cmd/link: recognize the new R_LARCH_32_PCREL type on loong64
+    
+    Due to the latest binutils change [1], at least for certain 32-bit
+    relocs in .eh_frame section, this new type of relocation record is
+    emitted, leading to breakage on systems with bleeding-edge toolchain
+    when trying to link with object(s) with such new-style relocs.
+    
+    Simply treating it the same as the existing reloc types seems enough.
+    
+    Fixes #54222
+    
+    [1]: https://sourceware.org/git/?p=binutils-gdb.git;a=commit;h=f09482a8747b6fd4c2d59a6a64677d3a3fe1e092
+    
+    Change-Id: I876d6711d5d4a674bead37e57f9503f1622d1136
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/420983
+    Run-TryBot: Dmitri Shuralyov <dmitshur@golang.org>
+    Reviewed-by: abner chenc <chenguoqi@loongson.cn>
+    Auto-Submit: Dmitri Shuralyov <dmitshur@golang.org>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+
+ src/cmd/link/internal/loadelf/ldelf.go | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+commit 417be37048d07532397a7db89eeee9d249564560
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Sat Jul 16 20:15:49 2022 +0800
+
+    doc/go1.19: improve the loong64 release notes
+    
+    Link to the LoongArch documentations site, mention the ABI variant
+    supported, and add a note about the unfortunate old-world/new-world split
+    situation that users must be aware of.
+    
+    Updates #46229
+    For #51400
+    
+    Change-Id: I6789f509263a0dbf113481148665e7951aa6a989
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/417715
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+    Run-TryBot: Dmitri Shuralyov <dmitshur@golang.org>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@golang.org>
+    Auto-Submit: Dmitri Shuralyov <dmitshur@golang.org>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: abner chenc <chenguoqi@loongson.cn>
+
+ doc/go1.19.html | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+commit 47e792e22eb0dd85c0197e32c2791f252be7244d
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Mon May 30 18:44:57 2022 +0800
+
+    runtime: clean up unused function gosave on loong64
+    
+    Change-Id: I28960a33d251a36e5e364fa6e27c5b2e13349f6b
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/409354
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Michael Pratt <mpratt@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+
+ src/runtime/asm_loong64.s | 15 ---------------
+ 1 file changed, 15 deletions(-)
+
+commit 111cdb58487f1a3d2bd82be14a90837f31a3e320
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Wed Jun 15 19:07:24 2022 +0800
+
+    all: update to current golang.org/x/sys revision
+    
+    go get -d golang.org/x/sys@6c1b26c55098eae66ce95ab7c3712ab6cbfff2b7
+    go mod tidy
+    go mod vendor
+    
+    This fixes the problem of the second return value in syscall on linux/loong64.
+    
+    Change-Id: I8018ae96f4e5ca9779b2c053cdccc6b2866bf0de
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/412274
+    Reviewed-by: Bryan Mills <bcmills@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Bryan Mills <bcmills@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/go.mod                                     |  2 +-
+ src/cmd/go.sum                                     |  4 +--
+ .../golang.org/x/sys/unix/asm_linux_loong64.s      |  4 +--
+ .../vendor/golang.org/x/sys/unix/ifreq_linux.go    |  9 +------
+ .../golang.org/x/sys/unix/syscall_solaris.go       |  1 +
+ .../golang.org/x/sys/unix/zerrors_linux_386.go     |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_amd64.go   |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_arm.go     |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_arm64.go   |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_loong64.go |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_mips.go    |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_mips64.go  |  2 +-
+ .../x/sys/unix/zerrors_linux_mips64le.go           |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_mipsle.go  |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_ppc.go     |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_ppc64.go   |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_ppc64le.go |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_riscv64.go |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_s390x.go   |  2 +-
+ .../golang.org/x/sys/unix/zerrors_linux_sparc64.go |  2 +-
+ .../x/sys/unix/zsyscall_solaris_amd64.go           | 14 +++++++++++
+ .../golang.org/x/sys/unix/ztypes_linux_386.go      |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_amd64.go    |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_arm.go      |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_arm64.go    |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_loong64.go  |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_mips.go     |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_mips64.go   |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_mips64le.go |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_mipsle.go   |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_ppc.go      |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_ppc64.go    |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_ppc64le.go  |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_riscv64.go  |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_s390x.go    |  2 +-
+ .../golang.org/x/sys/unix/ztypes_linux_sparc64.go  |  2 +-
+ .../golang.org/x/sys/unix/ztypes_openbsd_386.go    |  8 +++---
+ .../golang.org/x/sys/unix/ztypes_openbsd_amd64.go  |  8 +++---
+ .../golang.org/x/sys/unix/ztypes_openbsd_arm.go    |  8 +++---
+ .../golang.org/x/sys/unix/ztypes_openbsd_arm64.go  |  8 +++---
+ .../golang.org/x/sys/unix/ztypes_openbsd_mips64.go |  8 +++---
+ src/cmd/vendor/modules.txt                         |  2 +-
+ src/go.mod                                         |  2 +-
+ src/go.sum                                         |  4 +--
+ src/vendor/golang.org/x/sys/cpu/cpu_gccgo_x86.c    | 29 +++++++++-------------
+ src/vendor/modules.txt                             |  2 +-
+ 46 files changed, 88 insertions(+), 85 deletions(-)
+
+commit 97bfc77f3897d6268cf4f9bb6756b97ff5e7cc03
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Fri Jun 10 19:08:14 2022 +0800
+
+    syscall, runtime/internal/syscall: always zero the higher bits of return value on linux/loong64
+    
+    All loong64 syscalls return values only via R4/A0, and R5/A1 may contain unrelated
+    content. Always zero the second return value.
+    
+    Change-Id: I62af59369bece5bd8028b937c74f4694150f7a55
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/411615
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Austin Clements <austin@google.com>
+
+ src/runtime/internal/syscall/asm_linux_loong64.s | 2 +-
+ src/syscall/asm_linux_loong64.s                  | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+commit 1858ea5d857f3a874bef131b7e1bc162d05b3366
+Author: Tobias Klauser <tklauser@distanz.ch>
+Date:   Wed Jun 8 19:47:31 2022 +0200
+
+    syscall: remove unused setgroups on linux/loong64
+    
+    Setgroups in syscall_linux.go already wraps the setgroups(2) syscall
+    with correct POSIX semantics (ref. CL 210639).
+    
+    Change-Id: I961cd7c7fce1d70d23bf13cc82cad17854bbf40e
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/411214
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Tobias Klauser <tobias.klauser@gmail.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Tobias Klauser <tobias.klauser@gmail.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/syscall/syscall_linux_loong64.go  |  1 -
+ src/syscall/zsyscall_linux_loong64.go | 10 ----------
+ 2 files changed, 11 deletions(-)
+
+commit 2882786bf4cd779f166e9ced82a4da2ea0f8b1f9
+Author: Tobias Klauser <tklauser@distanz.ch>
+Date:   Tue Jun 7 07:25:10 2022 +0200
+
+    runtime: remove unused pipe and setNonblock on linux/loong64
+    
+    CL 389354 removed the fallback to pipe on all platforms with pipe2. This
+    is the case for linux. Thus, pipe and setNonblock are no longer needed
+    on linux/loong64 too.
+    
+    Change-Id: I089adf918d0fd8de5d4d61a893707a2660f89183
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/410736
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Tobias Klauser <tobias.klauser@gmail.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/runtime/defs_linux_loong64.go |  1 -
+ src/runtime/sys_linux_loong64.s   | 24 ------------------------
+ 2 files changed, 25 deletions(-)
+
+commit 30b929b1efb470cb9b434cd47d6cbaa74c2baedf
+Author: Tobias Klauser <tklauser@distanz.ch>
+Date:   Tue Jun 7 07:25:36 2022 +0200
+
+    syscall: remove unused accept on linux/loong64
+    
+    accept is no longer used on Linux since CL 346849 changed Accept to use
+    accept4 only.
+    
+    This follows CL 386415 which already removed accept on all other Linux
+    platforms before the linux/loong64 port was submitted.
+    
+    For #45964
+    
+    Change-Id: I26945ff780e71174a0b0c2f5313c4bc1e1cbf786
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/410737
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Auto-Submit: Tobias Klauser <tobias.klauser@gmail.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Tobias Klauser <tobias.klauser@gmail.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/syscall/syscall_linux_loong64.go  |  1 -
+ src/syscall/zsyscall_linux_loong64.go | 11 -----------
+ 2 files changed, 12 deletions(-)
+
+commit ef2567c7dd040f2cee87b8fd52885c6481deee35
+Author: David Chase <drchase@google.com>
+Date:   Tue Jun 7 12:28:54 2022 -0400
+
+    doc/go1.19: document loong64 port
+    
+    Updates #46229
+    For #51400
+    
+    Change-Id: Iedd5d3c4cd656b59ba2e1fe813851830849a8614
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/410816
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+    Reviewed-by: Austin Clements <austin@google.com>
+
+ doc/go1.19.html | 3 +++
+ 1 file changed, 3 insertions(+)
+
+commit ec9258029e40f7952051f5762b036b9d7f4f91f9
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Thu May 26 19:38:02 2022 +0800
+
+    internal/cpu: fix cpu cacheLineSize for loong64
+    
+    We choose 64 because the L1 Dcache of Loongson 3A5000 CPU is
+    4-way 256-line 64-byte-per-line.
+    
+    Change-Id: Ifb9a9f993dd6f75b5adb4ff6e4d93e945b1b2a98
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/408854
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Alex Rakoczy <alex@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/internal/cpu/cpu_loong64.go | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+commit f8c26a59a49e23074b20b91ed3c75958ddc81559
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Sat May 21 21:05:00 2022 +0800
+
+    syscall: update linux/loong64 kernel ABI, emulate fstatat with statx
+    
+    The linux/loong64 kernel ABI has changed a little since the inception
+    of the Go port; most notably fstat and fstatat are being removed [1],
+    leaving only statx as the stat mechanism. Fortunately the structs are
+    easy enough to translate, and we now exclusively use statx across the
+    board on loong64 for best compatibility with past and future kernels
+    (due to the architecture's young age, statx is always available).
+    
+    In wiring up the statx calls, it turned out the linux/loong64 syscall
+    definitions were out-of-date, so the generation script received some
+    tweaking as well.
+    
+    [1]: https://lore.kernel.org/all/20220518092619.1269111-1-chenhuacai@loongson.cn/
+    
+    Change-Id: Ifebb9ab9fef783683e453fa331d623575e824a48
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/407694
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: abner chenc <chenguoqi@loongson.cn>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Alex Rakoczy <alex@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+
+ src/internal/syscall/unix/at.go                    |   16 -
+ src/internal/syscall/unix/at_fstatat.go            |   28 +
+ src/internal/syscall/unix/at_statx.go              |   15 +
+ .../syscall/unix/at_sysnum_fstatat_linux.go        |    2 +-
+ src/syscall/mkerrors.sh                            |    1 +
+ src/syscall/syscall_linux_loong64.go               |   61 +-
+ src/syscall/types_linux.go                         |    9 +-
+ src/syscall/zerrors_linux_loong64.go               | 3417 ++++++++++----------
+ src/syscall/zsyscall_linux_loong64.go              |   55 +-
+ src/syscall/zsysnum_linux_loong64.go               |    3 +-
+ src/syscall/ztypes_linux_loong64.go                |   50 +-
+ 11 files changed, 1938 insertions(+), 1719 deletions(-)
+
+commit 62b38000ab42603ec217c99d187e03bd51bfa739
+Author: Ian Lance Taylor <iant@golang.org>
+Date:   Wed May 25 15:41:59 2022 -0700
+
+    runtime/internal/syscall: use correct result names for loong64
+    
+    Fixes "GOARCH=loong64 go vet runtime/internal/syscall"
+    
+    Change-Id: I5879eec3ff07b0c69a5a8ac8e854733261e98fbf
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/408695
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Bryan Mills <bcmills@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: xiaodong liu <teaofmoli@gmail.com>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+
+ src/runtime/internal/syscall/asm_linux_loong64.s | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+commit 61fc5df6897544d8ecf8efd5b39648a6bd121ec8
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Mon May 23 08:58:51 2022 +0800
+
+    runtime: add missing {TOPFRAME,NOFRAME} flag for linux/loong64
+    
+    Co-authored-by: limeidan <limeidan@loongson.cn>
+    Change-Id: I0011a10f831e6c2b0da96265682212b0747f0e2a
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/407774
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/runtime/asm_loong64.s | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+commit 654b03167f7d887d09a2d25bb3d1b4db9c8ae4f8
+Author: Guoqi Chen <chenguoqi@loongson.cn>
+Date:   Mon May 23 08:32:35 2022 +0800
+
+    cmd/internal/obj: add FuncInfo SPWRITE flag for linux/loong64
+    
+    Co-authored-by: limeidan <limeidan@loongson.cn>
+    Change-Id: Iac4f706fc9ff1047f1fa02f7178ebfbe38ad1ec3
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/407754
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/internal/obj/loong64/obj.go | 17 ++++++++++++++++-
+ 1 file changed, 16 insertions(+), 1 deletion(-)
+
+commit a2bca290e7bc8ab0cdd6c26038f15ac1bb9f8628
+Author: Cuong Manh Le <cuong.manhle.vn@gmail.com>
+Date:   Sat May 21 19:00:18 2022 +0700
+
+    cmd/compile: fix loong64 constant folding in division rules
+    
+    The divisor must be non-zero for the rule to be triggered.
+    
+    Fixes #53018
+    
+    Change-Id: Id56b8d986945bbb66e13131d11264ee438de5cb2
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/407655
+    Run-TryBot: Cuong Manh Le <cuong.manhle.vn@gmail.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Keith Randall <khr@golang.org>
+    Auto-Submit: Keith Randall <khr@golang.org>
+    Reviewed-by: Keith Randall <khr@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: xiaodong liu <teaofmoli@gmail.com>
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+
+ src/cmd/compile/internal/ssa/gen/LOONG64.rules |  8 +++----
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go | 16 ++++++++++++++
+ test/fixedbugs/issue53018.go                   | 30 ++++++++++++++++++++++++++
+ 3 files changed, 50 insertions(+), 4 deletions(-)
+
+commit 3fa5ab0d83e1a27628dd997f3883eadd399679e1
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Mon May 23 11:02:57 2022 +0800
+
+    runtime: fix the vDSO symbol version on loong64
+    
+    The current value is appropriate for an early in-house version of
+    Linux/LoongArch, but for the upstream version it is very likely
+    "LINUX_5.10" instead, per the latest upstream submission [1].
+    
+    [1]: https://lore.kernel.org/all/20220518095709.1313120-3-chenhuacai@loongson.cn/
+    
+    Change-Id: Ia97e5cae82a5b306bd3eea86b9e442441da07973
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/407755
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: abner chenc <chenguoqi@loongson.cn>
+
+ src/runtime/vdso_linux_loong64.go | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+commit ec464edb22301764b6caf7592ac8dc9451c595c6
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    cmd/dist: port to linux/loong64 completed
+    
+    For #46229
+    
+    Change-Id: I5c207482d0a2cfb3a66f7e293cf413a5b54daa26
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/397074
+    Run-TryBot: David Chase <drchase@google.com>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/dist/build.go | 1 -
+ 1 file changed, 1 deletion(-)
+
+commit c6ef69e7d7f79f6fc72e51aa7b1ff3c7373b7b53
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    misc, test: fix test error for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I6760b4a7e51646773cd0f48baa1baba01b213b7d
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342325
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ misc/cgo/test/testdata/issue9400/asm_loong64.s | 28 ++++++++++++++++++++++++++
+ test/intrinsic_atomic.go                       |  2 +-
+ test/nosplit.go                                |  3 +++
+ test/run.go                                    |  1 +
+ 4 files changed, 33 insertions(+), 1 deletion(-)
+
+commit 137133953025159683d48af2298f105a8fa2cbb9
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    go, math, os, reflect: support standard library for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I2ad9ed01fc913b90e75023ac0fa70de87a9f5de1
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342324
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+
+ src/go/types/gccgosizes.go   |  1 +
+ src/math/big/arith_loong64.s | 34 ++++++++++++++++++++++++++++++++++
+ src/os/endian_little.go      |  2 +-
+ src/reflect/asm_loong64.s    | 40 ++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 76 insertions(+), 1 deletion(-)
+
+commit ae3ee9a7ec4981779d9a5e20fbee1d5cb20c1e93
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    syscall: add syscall support for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ia676bd2875701639314cadbd39d97620afb3f0a2
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342317
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/syscall/asm_linux_loong64.s       |   44 +
+ src/syscall/endian_little.go          |    2 +-
+ src/syscall/mkall.sh                  |   10 +
+ src/syscall/syscall_linux_loong64.go  |  180 +++
+ src/syscall/types_linux.go            |    4 +-
+ src/syscall/zerrors_linux_loong64.go  | 2001 +++++++++++++++++++++++++++++++++
+ src/syscall/zsyscall_linux_loong64.go | 1564 ++++++++++++++++++++++++++
+ src/syscall/zsysnum_linux_loong64.go  |  308 +++++
+ src/syscall/ztypes_linux_loong64.go   |  599 ++++++++++
+ 9 files changed, 4709 insertions(+), 3 deletions(-)
+
+commit ed7c487178fb0abdf7cecc9d3368c65ab96ca584
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: add loong64 to architectures known to TestGCInfo
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I61bef32b38ab07543a147cf172b169eae21b26cf
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368082
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/runtime/gcinfo_test.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit 0811559dddd89d90275ebae363c5166d3c29c29d
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: add build tag for common support on linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ide01fb8a39fe3e890f6cbc5d28f4a1d47eb5d79b
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368081
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/runtime/hash64.go           | 2 +-
+ src/runtime/lfstack_64bit.go    | 2 +-
+ src/runtime/mpagealloc_64bit.go | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+commit 2a5ceaaa78e4643ff7ef38312f23a25d7c99c44f
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: implement runtime entry for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I252ecd0b13580c5e71723715023b1951985045f3
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342322
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Michael Knyszek <mknyszek@google.com>
+
+ src/runtime/asm_loong64.s       | 803 ++++++++++++++++++++++++++++++++++++++++
+ src/runtime/atomic_loong64.s    |   9 +
+ src/runtime/cputicks.go         |   2 +-
+ src/runtime/os_linux_loong64.go |  18 +
+ src/runtime/os_linux_noauxv.go  |   2 +-
+ src/runtime/rt0_linux_loong64.s |  24 ++
+ src/runtime/sys_loong64.go      |  20 +
+ 7 files changed, 876 insertions(+), 2 deletions(-)
+
+commit 34507e879d31d082eeb5f5722c6c2aceaeb7e052
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime/cgo: add cgo function call support for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I8ef0e7f17d6ada3d2f07c81524136b78457e7795
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342319
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/runtime/cgo/asm_loong64.s       | 67 +++++++++++++++++++++++++++++++++++
+ src/runtime/cgo/gcc_linux_loong64.c | 69 +++++++++++++++++++++++++++++++++++++
+ src/runtime/cgo/gcc_loong64.S       | 65 ++++++++++++++++++++++++++++++++++
+ 3 files changed, 201 insertions(+)
+
+commit a7cc865edbb9568c1a695bde8e8459d97e129f08
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime/internal/atomic: add atomic support for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I0333503db044c6f39df2d7f8d9dff213b1361d6c
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342320
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/runtime/internal/atomic/atomic_loong64.go |  83 +++++++
+ src/runtime/internal/atomic/atomic_loong64.s  | 299 ++++++++++++++++++++++++++
+ 2 files changed, 382 insertions(+)
+
+commit 8542bd8938efc8bb1bc681f4a0603c9f392e70b0
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: support vdso for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ie9bb5ccfc28e65036e2088c232bb333dcb259a60
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368076
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+
+ src/runtime/os_linux_novdso.go    |  2 +-
+ src/runtime/vdso_elf64.go         |  2 +-
+ src/runtime/vdso_in_none.go       |  2 +-
+ src/runtime/vdso_linux.go         |  2 +-
+ src/runtime/vdso_linux_loong64.go | 27 +++++++++++++++++++++++++++
+ 5 files changed, 31 insertions(+), 4 deletions(-)
+
+commit 00847065287a11353c66b4144f5692848c7e837e
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: implement signal for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ifa0229d2044dd53683de4a2b3ab965b16263f267
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368075
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+
+ src/runtime/defs_linux_loong64.go   | 212 ++++++++++++++++++++++++++++++++++++
+ src/runtime/signal_linux_loong64.go |  75 +++++++++++++
+ src/runtime/signal_loong64.go       |  98 +++++++++++++++++
+ 3 files changed, 385 insertions(+)
+
+commit c8de7628cbbf5c3d35158cf92ae4314898930c47
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: implement syscalls for runtime bootstrap on linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I848608267932717895d5cff9e33040029c3f3c4b
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368080
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+
+ src/runtime/internal/syscall/asm_linux_loong64.s |  29 ++
+ src/runtime/sys_linux_loong64.s                  | 631 +++++++++++++++++++++++
+ 2 files changed, 660 insertions(+)
+
+commit 96a10b9c8469110a0aa30ea2185ca55f4aefef99
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: implement duffzero/duffcopy for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ida040e76dc8172f60e6aee1ea2b5bce13ab3581e
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368077
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+
+ src/runtime/duff_loong64.s | 907 +++++++++++++++++++++++++++++++++++++++++++++
+ src/runtime/mkduff.go      |  25 ++
+ 2 files changed, 932 insertions(+)
+
+commit 2a5114f49af42c1df293e64841b28c22a84211f0
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu May 19 20:01:10 2022 +0800
+
+    runtime: support memclr/memmove for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I7c1f39670034db6714630d479bc41b6620ba2b1a
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368079
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/runtime/memclr_loong64.s  |  41 +++++++++++++++++
+ src/runtime/memmove_loong64.s | 105 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 146 insertions(+)
+
+commit 740b0ebb76c4cb6788eb03be683650938a7f5897
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Dec 1 17:15:16 2021 +0800
+
+    runtime: implement asyncPreempt for linux/loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I7a64e38b15a99816bd74262c02f62dad021cc166
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368078
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/runtime/mkpreempt.go      |  41 ++++++++++++++
+ src/runtime/preempt_loong64.s | 129 ++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 170 insertions(+)
+
+commit 7607888df0eca35dadb0529960d7965d0d6f4072
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Dec 1 15:48:53 2021 +0800
+
+    runtime: load/save TLS variable g on loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I5e09759ce9201596e89a01fc4a6f7fd7e205449f
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/368074
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/runtime/stubs_loong64.go | 11 +++++++++++
+ src/runtime/tls_loong64.s    | 26 ++++++++++++++++++++++++++
+ 2 files changed, 37 insertions(+)
+
+commit 88c5324f2ea7ebc2fb3f12c3c821096382663aa9
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Mon Nov 15 20:59:24 2021 +0800
+
+    internal/syscall/unix: loong64 use generic syscall
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I5988bf3efed37b03b9193f1089dfece060ccba99
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/363934
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    Run-TryBot: David Chase <drchase@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/internal/syscall/unix/at_sysnum_fstatat_linux.go | 2 +-
+ src/internal/syscall/unix/sysnum_linux_generic.go    | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+commit d28bf6c9a2ea9b992796738d03eb3d15ffbfc0b4
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 16:31:52 2021 +0800
+
+    internal/bytealg: support basic byte operation on loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I4ac6d38dc632abfa0b698325ca0ae349c0d7ecd3
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342316
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/internal/bytealg/compare_generic.go   |  2 +-
+ src/internal/bytealg/compare_loong64.s    | 86 +++++++++++++++++++++++++++++++
+ src/internal/bytealg/compare_native.go    |  2 +-
+ src/internal/bytealg/equal_loong64.s      | 52 +++++++++++++++++++
+ src/internal/bytealg/indexbyte_generic.go |  2 +-
+ src/internal/bytealg/indexbyte_loong64.s  | 52 +++++++++++++++++++
+ src/internal/bytealg/indexbyte_native.go  |  2 +-
+ 7 files changed, 194 insertions(+), 4 deletions(-)
+
+commit 30b17b6f604e30327df7ea800711526201d19aff
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Mon Nov 15 20:53:47 2021 +0800
+
+    internal/{cpu, goarch}: add constant definition for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I39d42e5959391e47bf621b3bdd3d95de72f023cc
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342318
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/internal/cpu/cpu_loong64.go       | 11 +++++++++++
+ src/internal/goarch/goarch.go         |  1 +
+ src/internal/goarch/goarch_loong64.go | 15 +++++++++++++++
+ 3 files changed, 27 insertions(+)
+
+commit 076039a5e16acf104210d62778d48363589e241d
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 17:06:29 2021 +0800
+
+    cmd/nm, cmd/objdump, cmd/pprof: disassembly is not supported on loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ic96e4f0c46d9a6b8cd020e899f32c40681daf9c5
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342323
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/nm/nm_cgo_test.go       | 2 +-
+ src/cmd/objdump/objdump_test.go | 2 ++
+ src/cmd/pprof/pprof_test.go     | 2 ++
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+commit cc4957a5f6eba946f359ed9646ec3e5083a259a9
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 16:25:46 2021 +0800
+
+    cmd/link: support linker for linux/loong64
+    
+    The basic arch-specific hooks are implemented, which
+    are used for internal and external linker.
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I4680eb0635dd0fa3d6ea8348a2488da9c7e33d3b
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/349514
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/link/internal/ld/config.go     |   2 +-
+ src/cmd/link/internal/ld/elf.go        |   9 +-
+ src/cmd/link/internal/ld/lib.go        |   2 +
+ src/cmd/link/internal/ld/pcln.go       |   2 +-
+ src/cmd/link/internal/ld/target.go     |   4 +
+ src/cmd/link/internal/loadelf/ldelf.go |  14 ++
+ src/cmd/link/internal/loong64/asm.go   | 240 +++++++++++++++++++++++++++++++++
+ src/cmd/link/internal/loong64/l.go     |  17 +++
+ src/cmd/link/internal/loong64/obj.go   |  58 ++++++++
+ src/cmd/link/internal/sym/reloc.go     |   2 +
+ src/cmd/link/link_test.go              |   2 +
+ src/cmd/link/main.go                   |   3 +
+ 12 files changed, 351 insertions(+), 4 deletions(-)
+
+commit 335569b59804f8d14bdb9c7ee2e8b0c2268226ae
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 15:25:14 2021 +0800
+
+    cmd/asm/internal: assembler end-to-end test for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I93d8be36e44e516df70b25e20d9c0695a05510d1
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/349510
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/asm/internal/asm/endtoend_test.go       |   7 +
+ src/cmd/asm/internal/asm/operand_test.go        |  88 ++++++++++
+ src/cmd/asm/internal/asm/testdata/loong64.s     |  11 ++
+ src/cmd/asm/internal/asm/testdata/loong64enc1.s | 209 ++++++++++++++++++++++++
+ src/cmd/asm/internal/asm/testdata/loong64enc2.s |  82 ++++++++++
+ src/cmd/asm/internal/asm/testdata/loong64enc3.s | 131 +++++++++++++++
+ 6 files changed, 528 insertions(+)
+
+commit 845a95b1ae0f80d2b30ab6277e31b6d6164f0a90
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu Nov 25 14:20:39 2021 +0800
+
+    cmd/compile/internal: fix test error on loong64
+    
+    For TestLogOpt test case, add loong64 support to test the host
+    architecture and os.
+    
+    The Ctz64 is not intrinsified on loong64 for TestIntendedInlining.
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I42280e89a337dbfde55a01a134820f8ae94f6b47
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/400237
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/compile/internal/logopt/logopt_test.go | 2 +-
+ src/cmd/compile/internal/test/inl_test.go      | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+commit 0653cb4cf70f7091d10c409c23a12eabbd783fef
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Tue Feb 22 15:24:47 2022 +0800
+
+    cmd/asm/internal: configure assembler for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I4b0247a331256162b47fbd94589f46ba062d4d44
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/387234
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/asm/internal/arch/arch.go    | 56 ++++++++++++++++++++++++++++++
+ src/cmd/asm/internal/arch/loong64.go | 67 ++++++++++++++++++++++++++++++++++++
+ src/cmd/asm/internal/asm/asm.go      | 18 ++++++++++
+ 3 files changed, 141 insertions(+)
+
+commit fd17a4dc0907967e31d4027e254bf195aeefe684
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Nov 24 16:41:33 2021 +0800
+
+    cmd/compile: register Init function for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ia3cb07af626e3422e43e3834baf15b7c8fad2326
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/349511
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+
+ src/cmd/compile/main.go | 2 ++
+ 1 file changed, 2 insertions(+)
+
+commit 2136e1551089bbac284980c2521d8b729f6a5c3e
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Nov 24 16:47:08 2021 +0800
+
+    cmd/compile/internal/loong64: implement Init function for loong64
+    
+    Register functions and parameters that are used in gc backend and
+    are architecture related for loong64.
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Iab3f13b70a41f31f412b59801def3106f5eb7c11
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367036
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+
+ src/cmd/compile/internal/loong64/galign.go |  23 +
+ src/cmd/compile/internal/loong64/ggen.go   |  59 ++
+ src/cmd/compile/internal/loong64/ssa.go    | 861 +++++++++++++++++++++++++++++
+ 3 files changed, 943 insertions(+)
+
+commit 900ae5b35a75e1f7bc7c8573d9480cbbfd0eee47
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu Nov 25 11:59:37 2021 +0800
+
+    cmd/compile/internal/ssagen: enable intrinsic operation on loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: If28fe03297e1de62f348373f2779dce07f54611c
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367042
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/compile/internal/ssagen/ssa.go | 36 +++++++++++++++++-----------------
+ 1 file changed, 18 insertions(+), 18 deletions(-)
+
+commit 756fcd8fc2cbdf6575d8da454c5006c50220dafd
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Nov 24 17:48:09 2021 +0800
+
+    cmd/compile/internal/ssa: config functions used in lower pass for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I50d20eb22f2108d245513de8ac95ebe0b7e1a1dc
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367037
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/compile/internal/ssa/config.go | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+commit a2d12076b9268c11d300bddcbce04675ec2f42d3
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu Nov 25 11:41:03 2021 +0800
+
+    cmd/compile/internal/ssa: add support on loong64 for schedule phase
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Id533912c62d8c4e2aa3c124561772b543d685d7d
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367041
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/compile/internal/ssa/schedule.go | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+commit a6c95e75d9ff8a01dc05c1d48fb766b05f4fe298
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu Nov 25 10:26:47 2021 +0800
+
+    cmd/compile/internal/ssa: inline memmove with known size
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I1534b66b527efaf2bbaa8e6e6ac0618aac0b5930
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367040
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/compile/internal/ssa/rewrite.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit ec5bdefd0a8f4a4dc7ba8d6ab4e1cf393384d03c
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Nov 24 17:31:18 2021 +0800
+
+    cmd/compile/internal/ssa{,/gen}: define rules and operation on loong64
+    
+    The rules and operation definition is used to generate rewrite functions
+    and OpKind type constant.
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: Ia362ed7ba5d84046697aadbc8d6d4cbe495f6076
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367039
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/compile/internal/ssa/gen/LOONG64.rules |  675 ++
+ src/cmd/compile/internal/ssa/gen/LOONG64Ops.go |  480 ++
+ src/cmd/compile/internal/ssa/opGen.go          | 2599 ++++++--
+ src/cmd/compile/internal/ssa/rewriteLOONG64.go | 7946 ++++++++++++++++++++++++
+ 4 files changed, 11325 insertions(+), 375 deletions(-)
+
+commit 83ee6c1d167a361b510e9bb449e4183e2fb583b1
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Nov 24 17:53:07 2021 +0800
+
+    cmd/compile/internal/ssa: increase the bit width of BlockKind type
+    
+    After the BlockKind of loong64 is introduced, it exceeds the maximum
+    range that int8 can represent.
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I246d9c22334d0ea9e1440d29df05c9ec2d472b30
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367038
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/compile/internal/ssa/block.go | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+commit c1105cfd435c84f3454822fdccfe0c8ab7d8f621
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 16:01:31 2021 +0800
+
+    cmd/internal/obj{,/loong64}: instructions and registers for loong64
+    
+    Implemented an assembler for LoongArch64(loong64 is short name) -
+    this provides register definitions and instruction encoding as
+    defined in the LoongArch Instruction Set Manual.
+    
+    LoongArch Instruction Set Manual:
+      https://github.com/loongson/LoongArch-Documentation/releases
+    
+    Contributors to the linux/loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I930d2a19246496e3ca36d55539183c0f9f650ad9
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342309
+    Reviewed-by: David Chase <drchase@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/internal/obj/link.go           |    1 +
+ src/cmd/internal/obj/loong64/a.out.go  |  414 +++++++
+ src/cmd/internal/obj/loong64/anames.go |  130 +++
+ src/cmd/internal/obj/loong64/asm.go    | 1960 ++++++++++++++++++++++++++++++++
+ src/cmd/internal/obj/loong64/cnames.go |   43 +
+ src/cmd/internal/obj/loong64/list.go   |   46 +
+ src/cmd/internal/obj/loong64/obj.go    |  701 ++++++++++++
+ src/cmd/internal/obj/util.go           |   19 +-
+ 8 files changed, 3305 insertions(+), 9 deletions(-)
+
+commit bccce9028996502e62a92255d79d5e003fbae63b
+Author: Ian Lance Taylor <iant@golang.org>
+Date:   Fri Apr 22 15:38:00 2022 -0700
+
+    vendor, cmd/vendor: update to current x/sys repo
+    
+    Ran, in src and src/cmd:
+    
+        go get -u golang.org/x/sys
+        go mod vendor
+        go mod tidy
+    
+    This brings in loong64 support.
+    
+    Change-Id: Ide30bd7bd073f473be9d8329e6a4f1d2c903d9a3
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/401855
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/go.mod                                     |   2 +-
+ src/cmd/go.sum                                     |   4 +-
+ .../golang.org/x/sys/unix/asm_linux_loong64.s      |  54 ++
+ .../vendor/golang.org/x/sys/unix/endian_little.go  |   4 +-
+ src/cmd/vendor/golang.org/x/sys/unix/mkerrors.sh   |   3 +
+ .../vendor/golang.org/x/sys/unix/syscall_bsd.go    |  11 +-
+ .../vendor/golang.org/x/sys/unix/syscall_darwin.go |  41 +-
+ .../golang.org/x/sys/unix/syscall_dragonfly.go     |   5 -
+ .../golang.org/x/sys/unix/syscall_freebsd.go       |   5 -
+ .../vendor/golang.org/x/sys/unix/syscall_linux.go  |  11 +-
+ .../golang.org/x/sys/unix/syscall_linux_amd64.go   |   1 +
+ .../golang.org/x/sys/unix/syscall_linux_arm64.go   |   1 +
+ .../golang.org/x/sys/unix/syscall_linux_loong64.go | 191 +++++
+ .../vendor/golang.org/x/sys/unix/syscall_netbsd.go |   5 -
+ .../golang.org/x/sys/unix/syscall_openbsd.go       |   5 -
+ .../golang.org/x/sys/unix/syscall_solaris.go       | 120 ++-
+ .../vendor/golang.org/x/sys/unix/zerrors_linux.go  |  30 +-
+ .../golang.org/x/sys/unix/zerrors_linux_loong64.go | 818 +++++++++++++++++++++
+ .../golang.org/x/sys/unix/zsyscall_darwin_amd64.go |  13 +-
+ .../golang.org/x/sys/unix/zsyscall_darwin_amd64.s  |   8 +-
+ .../golang.org/x/sys/unix/zsyscall_darwin_arm64.go |  13 +-
+ .../golang.org/x/sys/unix/zsyscall_darwin_arm64.s  |   8 +-
+ .../vendor/golang.org/x/sys/unix/zsyscall_linux.go |  99 +++
+ .../golang.org/x/sys/unix/zsyscall_linux_amd64.go  |  11 +
+ .../golang.org/x/sys/unix/zsyscall_linux_arm64.go  |  11 +
+ .../x/sys/unix/zsyscall_linux_loong64.go           | 552 ++++++++++++++
+ .../golang.org/x/sys/unix/zsysnum_linux_386.go     |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_amd64.go   |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_arm.go     |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_arm64.go   |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_loong64.go | 313 ++++++++
+ .../golang.org/x/sys/unix/zsysnum_linux_mips.go    |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_mips64.go  |   1 +
+ .../x/sys/unix/zsysnum_linux_mips64le.go           |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_mipsle.go  |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_ppc.go     |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_ppc64.go   |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_ppc64le.go |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_riscv64.go |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_s390x.go   |   1 +
+ .../golang.org/x/sys/unix/zsysnum_linux_sparc64.go |   1 +
+ .../vendor/golang.org/x/sys/unix/ztypes_linux.go   |  62 +-
+ .../golang.org/x/sys/unix/ztypes_linux_386.go      |  13 +
+ .../golang.org/x/sys/unix/ztypes_linux_amd64.go    |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_arm.go      |  13 +
+ .../golang.org/x/sys/unix/ztypes_linux_arm64.go    |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_loong64.go  | 679 +++++++++++++++++
+ .../golang.org/x/sys/unix/ztypes_linux_mips.go     |  13 +
+ .../golang.org/x/sys/unix/ztypes_linux_mips64.go   |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_mips64le.go |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_mipsle.go   |  13 +
+ .../golang.org/x/sys/unix/ztypes_linux_ppc.go      |  13 +
+ .../golang.org/x/sys/unix/ztypes_linux_ppc64.go    |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_ppc64le.go  |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_riscv64.go  |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_s390x.go    |  14 +
+ .../golang.org/x/sys/unix/ztypes_linux_sparc64.go  |  14 +
+ .../golang.org/x/sys/windows/syscall_windows.go    |   7 +-
+ src/cmd/vendor/modules.txt                         |   2 +-
+ src/go.mod                                         |   2 +-
+ src/go.sum                                         |   4 +-
+ src/vendor/golang.org/x/sys/cpu/byteorder.go       |   1 +
+ src/vendor/golang.org/x/sys/cpu/cpu_loong64.go     |  13 +
+ src/vendor/modules.txt                             |   2 +-
+ 64 files changed, 3170 insertions(+), 146 deletions(-)
+
+commit af99c2092a878500d508433baddcfcc12910c21b
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Mar 30 15:47:04 2022 +0800
+
+    cmd/internal/objabi: define Go relocation types for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+    https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I8d31b3cd827325aa0ff748ca8c0c0da6df6ed99f
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/396734
+    Reviewed-by: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@google.com>
+
+ src/cmd/internal/objabi/reloctype.go        | 30 ++++++++++++++++++++++++++++-
+ src/cmd/internal/objabi/reloctype_string.go | 20 ++++++++++++-------
+ 2 files changed, 42 insertions(+), 8 deletions(-)
+
+commit 7a22c8a07f0909ea4da71df7379640cc281bda12
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 15:32:16 2021 +0800
+
+    cmd/cgo: configure cgo tool for loong64
+    
+    Define pointer and int type size for loong64
+    Add "-mabi=lp64d" argument to gcc
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I9699fd9af0112e72193ac24b736b85c580887a0f
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342305
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+
+ src/cmd/cgo/gcc.go  | 2 ++
+ src/cmd/cgo/main.go | 2 ++
+ 2 files changed, 4 insertions(+)
+
+commit d09ca2cb8ec5306f20b527266ce161bd9292cad4
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 15:57:43 2021 +0800
+
+    cmd/go/internal: configure go tool workflow for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I6b537a7d842b0683586917fe7ea7cd4d70d888de
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342308
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Bryan Mills <bcmills@google.com>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+
+ src/cmd/go/internal/imports/build.go | 1 +
+ src/cmd/go/internal/work/exec.go     | 2 ++
+ 2 files changed, 3 insertions(+)
+
+commit edab07d09f1dcee58395602054ffb1cd03490dd8
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 15:53:05 2021 +0800
+
+    cmd/dist: support dist tool for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I61dca43680d8e5bd3198a38577450a53f405a987
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342307
+    Reviewed-by: David Chase <drchase@google.com>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    Auto-Submit: Ian Lance Taylor <iant@golang.org>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/dist/build.go     | 3 +++
+ src/cmd/dist/buildtool.go | 2 ++
+ src/cmd/dist/main.go      | 2 ++
+ src/cmd/dist/test.go      | 4 ++--
+ 4 files changed, 9 insertions(+), 2 deletions(-)
+
+commit 8140a605feee9058e28195fcb047d3f1906e77e5
+Author: Robert Findley <rfindley@google.com>
+Date:   Fri Apr 22 11:47:11 2022 -0400
+
+    go/types, types2: add loong64 to gcArchSizes
+    
+    Values are taken from cmd/internal/sys/arch.go. Also fix some incorrect
+    alphabetical sorting to put arm > amd.
+    
+    Updates #46229
+    Fixes #52495
+    
+    Change-Id: If7d2c675238093692060358003915f1649792cf5
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/401576
+    Run-TryBot: Robert Findley <rfindley@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@google.com>
+    Reviewed-by: WANG Xuerui <git@xen0n.name>
+    Reviewed-by: xiaodong liu <teaofmoli@gmail.com>
+
+ src/cmd/compile/internal/types2/sizes.go | 7 ++++---
+ src/go/types/sizes.go                    | 7 ++++---
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+commit d4dbad53ca080d767798ee4267999868d7f2c22d
+Author: Bryan Mills <bcmills@google.com>
+Date:   Tue Apr 12 02:53:29 2022 +0000
+
+    Revert "cmd/compile/internal: fix test error on loong64"
+    
+    This reverts CL 367043.
+    
+    Reason for revert: auto-submitted prematurely, breaking tests on most builders.
+    
+    Change-Id: I6da319fb042b629bcd6f549be638497a357e7d28
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/399795
+    Run-TryBot: Bryan Mills <bcmills@google.com>
+    Auto-Submit: Bryan Mills <bcmills@google.com>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+
+ src/cmd/compile/internal/logopt/logopt_test.go | 2 +-
+ src/cmd/compile/internal/test/inl_test.go      | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+commit ace7672526692f8290bd98e339169c6eca76ba07
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Thu Nov 25 14:20:39 2021 +0800
+
+    cmd/compile/internal: fix test error on loong64
+    
+    For TestLogOpt test case, add loong64 support to test the host
+    architecture and os.
+    
+    The Ctz64 is not intrinsified on loong64 for TestIntendedInlining.
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I4ca290bf725425a9a6ac2c6767a5bf4ff2339d0e
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/367043
+    Reviewed-by: David Chase <drchase@google.com>
+    Run-TryBot: David Chase <drchase@google.com>
+    TryBot-Result: Gopher Robot <gobot@golang.org>
+    Reviewed-by: Russ Cox <rsc@golang.org>
+    Auto-Submit: Russ Cox <rsc@golang.org>
+
+ src/cmd/compile/internal/logopt/logopt_test.go | 2 +-
+ src/cmd/compile/internal/test/inl_test.go      | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+commit cd33b4089caf362203cd749ee1b3680b72a8c502
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Wed Mar 30 16:52:59 2022 +0800
+
+    debug: define ELF relocation for loong64
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    For #46229
+    
+    Change-Id: I0c58305754c20d2a59328adbd82caa527de254ec
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/396735
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    Trust: Cherry Mui <cherryyz@google.com>
+
+ api/next/46229.txt    | 105 ++++++++++++++++++++++++++++++++++++++++++++++
+ src/debug/elf/elf.go  | 114 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/debug/elf/file.go |  50 ++++++++++++++++++++++
+ 3 files changed, 269 insertions(+)
+
+commit 5bfd51147e460bad6615b5baaf68609a413eda1a
+Author: Xiaodong Liu <liuxiaodong@loongson.cn>
+Date:   Sun Aug 15 14:57:00 2021 +0800
+
+    copyright: add Loongson into AUTHORS
+    
+    Contributors to the loong64 port are:
+      Weining Lu <luweining@loongson.cn>
+      Lei Wang <wanglei@loongson.cn>
+      Lingqin Gong <gonglingqin@loongson.cn>
+      Xiaolin Zhao <zhaoxiaolin@loongson.cn>
+      Meidan Li <limeidan@loongson.cn>
+      Xiaojuan Zhai <zhaixiaojuan@loongson.cn>
+      Qiyuan Pu <puqiyuan@loongson.cn>
+      Guoqi Chen <chenguoqi@loongson.cn>
+    
+    This port has been updated to Go 1.15.6:
+      https://github.com/loongson/go
+    
+    Updates #46229
+    
+    Change-Id: I23fb430f1f6e8a587f13e2f020721cbd3a45d4ed
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/342303
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    Trust: Cherry Mui <cherryyz@google.com>
+
+ AUTHORS | 1 +
+ 1 file changed, 1 insertion(+)
+
+commit 20a71c9a1d7e0d246dfad2c2a2057c954324217d
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Mon Sep 6 15:17:11 2021 +0800
+
+    cmd/internal/sys: fix placement of loong64 definition
+    
+    In rebasing the patch series up to CL 339015, the branches were messed
+    up by me, and changes from v3 to v4 of CL 339009 was lost. Fix the
+    ordering to restore alphabetical order per original review.
+    
+    Change-Id: I8e57c96e996c4f962cab684a9d305a8dbdeea43b
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/347731
+    Run-TryBot: Tobias Klauser <tobias.klauser@gmail.com>
+    TryBot-Result: Go Bot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    Trust: Meng Zhuo <mzh@golangcn.org>
+
+ src/cmd/internal/sys/arch.go | 24 ++++++++++++------------
+ 1 file changed, 12 insertions(+), 12 deletions(-)
+
+commit c7f09eeb1397e177508c8761c469dd377ce390cf
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Sun Jun 20 12:59:45 2021 +0800
+
+    cmd/internal/sys: declare loong64 arch
+    
+    Updates #46229
+    
+    Change-Id: Icb736f2440443e9245872b091d13e5bdfb6cb01a
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/339009
+    Reviewed-by: Meng Zhuo <mzh@golangcn.org>
+    Reviewed-by: Cherry Mui <cherryyz@google.com>
+    Trust: Meng Zhuo <mzh@golangcn.org>
+    Trust: Michael Knyszek <mknyszek@google.com>
+    Run-TryBot: Meng Zhuo <mzh@golangcn.org>
+    TryBot-Result: Go Bot <gobot@golang.org>
+
+ src/cmd/internal/sys/arch.go | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+commit 21a04e33353316635b5f3351e807916f3bb1e844
+Author: Ian Lance Taylor <iant@golang.org>
+Date:   Wed Jul 14 16:04:49 2021 -0700
+
+    doc/go1.17: mention GOARCH=loong64
+    
+    For #46229
+    
+    Change-Id: I54d01d90f2b0c892d76121f1350c0e8cf4b2772f
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/334729
+    Trust: Ian Lance Taylor <iant@golang.org>
+    Reviewed-by: Dmitri Shuralyov <dmitshur@golang.org>
+
+ doc/go1.17.html | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+commit 2b00a54baf2b677b2aaddd93c25b11ea4642a86f
+Author: WANG Xuerui <git@xen0n.name>
+Date:   Mon Jul 12 04:40:28 2021 +0000
+
+    go/build, runtime/internal/sys: reserve GOARCH=loong64
+    
+    Per discussion at #46229 we are taking the "loong64" GOARCH value for
+    the upcoming LoongArch 64-bit port. It is not clear whether any 32-bit
+    non-bare-metal userland will exist for LoongArch, so only reserve
+    "loong64" for now.
+    
+    Change-Id: I97d262b4ab68ff61c22ccf83e26baf70eefd568d
+    GitHub-Last-Rev: ecdd8c53bdee57fec093ddba18ec8878b8ae7c74
+    GitHub-Pull-Request: golang/go#47129
+    Reviewed-on: https://go-review.googlesource.com/c/go/+/333909
+    Run-TryBot: Ian Lance Taylor <iant@golang.org>
+    TryBot-Result: Go Bot <gobot@golang.org>
+    Reviewed-by: Ian Lance Taylor <iant@golang.org>
+    Trust: Alexander Rakoczy <alex@golang.org>
+
+ src/go/build/syslist.go                         |  2 +-
+ src/runtime/internal/sys/zgoarch_386.go         |  1 +
+ src/runtime/internal/sys/zgoarch_amd64.go       |  1 +
+ src/runtime/internal/sys/zgoarch_arm.go         |  1 +
+ src/runtime/internal/sys/zgoarch_arm64.go       |  1 +
+ src/runtime/internal/sys/zgoarch_arm64be.go     |  1 +
+ src/runtime/internal/sys/zgoarch_armbe.go       |  1 +
+ src/runtime/internal/sys/zgoarch_loong64.go     | 33 +++++++++++++++++++++++++
+ src/runtime/internal/sys/zgoarch_mips.go        |  1 +
+ src/runtime/internal/sys/zgoarch_mips64.go      |  1 +
+ src/runtime/internal/sys/zgoarch_mips64le.go    |  1 +
+ src/runtime/internal/sys/zgoarch_mips64p32.go   |  1 +
+ src/runtime/internal/sys/zgoarch_mips64p32le.go |  1 +
+ src/runtime/internal/sys/zgoarch_mipsle.go      |  1 +
+ src/runtime/internal/sys/zgoarch_ppc.go         |  1 +
+ src/runtime/internal/sys/zgoarch_ppc64.go       |  1 +
+ src/runtime/internal/sys/zgoarch_ppc64le.go     |  1 +
+ src/runtime/internal/sys/zgoarch_riscv.go       |  1 +
+ src/runtime/internal/sys/zgoarch_riscv64.go     |  1 +
+ src/runtime/internal/sys/zgoarch_s390.go        |  1 +
+ src/runtime/internal/sys/zgoarch_s390x.go       |  1 +
+ src/runtime/internal/sys/zgoarch_sparc.go       |  1 +
+ src/runtime/internal/sys/zgoarch_sparc64.go     |  1 +
+ src/runtime/internal/sys/zgoarch_wasm.go        |  1 +
+ 24 files changed, 56 insertions(+), 1 deletion(-)
